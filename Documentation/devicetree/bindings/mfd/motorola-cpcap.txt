@@ -17,6 +17,7 @@ The sub-functions of CPCAP get their own node with their own compatible values,
 which are described in the following files:
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 - ../power/supply/cpcap-battery.txt
 - ../power/supply/cpcap-charger.txt
 - ../regulator/cpcap-regulator.txt
@@ -26,6 +27,8 @@ which are described in the following files:
 - ../leds/leds-cpcap.txt
 - ../iio/adc/cpcap-adc.txt
 =======
+=======
+>>>>>>> a2521822bdfd... Merge tag 'devicetree-fixes-for-5.12-2' of git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux
 - Documentation/devicetree/bindings/power/supply/cpcap-battery.txt
 - Documentation/devicetree/bindings/power/supply/cpcap-charger.txt
 - Documentation/devicetree/bindings/regulator/cpcap-regulator.txt
@@ -34,7 +37,10 @@ which are described in the following files:
 - Documentation/devicetree/bindings/rtc/cpcap-rtc.txt
 - Documentation/devicetree/bindings/leds/leds-cpcap.txt
 - Documentation/devicetree/bindings/iio/adc/motorola,cpcap-adc.yaml
+<<<<<<< HEAD
 >>>>>>> 21d6ff39e169... dt-bindings:iio:adc: update motorola,cpcap-adc.yaml reference
+=======
+>>>>>>> a2521822bdfd... Merge tag 'devicetree-fixes-for-5.12-2' of git://git.kernel.org/pub/scm/linux/kernel/git/robh/linux
 
 The only exception is the audio codec. Instead of a compatible value its
 node must be named "audio-codec".
