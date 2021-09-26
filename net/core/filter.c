@@ -5658,7 +5658,7 @@ BPF_CALL_5(bpf_skb_check_mtu, struct sk_buff *, skb,
 	if (unlikely(flags & ~(BPF_MTU_CHK_SEGS)))
 		return -EINVAL;
 
-	if (unlikely(flags & BPF_MTU_CHK_SEGS && (len_diff || *mtu_len)))
+	if (unlikely(flags & BPF_MTU_CHK_SEGS && len_diff))
 		return -EINVAL;
 
 	dev = __dev_via_ifindex(dev, ifindex);
@@ -5668,11 +5668,7 @@ BPF_CALL_5(bpf_skb_check_mtu, struct sk_buff *, skb,
 	mtu = READ_ONCE(dev->mtu);
 
 	dev_len = mtu + dev->hard_header_len;
-
-	/* If set use *mtu_len as input, L3 as iph->tot_len (like fib_lookup) */
-	skb_len = *mtu_len ? *mtu_len + dev->hard_header_len : skb->len;
-
-	skb_len += len_diff; /* minus result pass check */
+	skb_len = skb->len + len_diff; /* minus result pass check */
 	if (skb_len <= dev_len) {
 		ret = BPF_MTU_CHK_RET_SUCCESS;
 		goto out;
@@ -5716,10 +5712,6 @@ BPF_CALL_5(bpf_xdp_check_mtu, struct xdp_buff *, xdp,
 
 	/* Add L2-header as dev MTU is L3 size */
 	dev_len = mtu + dev->hard_header_len;
-
-	/* Use *mtu_len as input, L3 as iph->tot_len (like fib_lookup) */
-	if (*mtu_len)
-		xdp_len = *mtu_len + dev->hard_header_len;
 
 	xdp_len += len_diff; /* minus result pass check */
 	if (xdp_len > dev_len)

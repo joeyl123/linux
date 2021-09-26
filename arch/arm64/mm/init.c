@@ -219,40 +219,17 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 
 int pfn_valid(unsigned long pfn)
 {
-	phys_addr_t addr = PFN_PHYS(pfn);
+	phys_addr_t addr = pfn << PAGE_SHIFT;
 
-	/*
-	 * Ensure the upper PAGE_SHIFT bits are clear in the
-	 * pfn. Else it might lead to false positives when
-	 * some of the upper bits are set, but the lower bits
-	 * match a valid pfn.
-	 */
-	if (PHYS_PFN(addr) != pfn)
+	if ((addr >> PAGE_SHIFT) != pfn)
 		return 0;
 
 #ifdef CONFIG_SPARSEMEM
-{
-	struct mem_section *ms;
-
 	if (pfn_to_section_nr(pfn) >= NR_MEM_SECTIONS)
 		return 0;
 
-	ms = __pfn_to_section(pfn);
-	if (!valid_section(ms))
+	if (!valid_section(__pfn_to_section(pfn)))
 		return 0;
-
-	/*
-	 * ZONE_DEVICE memory does not have the memblock entries.
-	 * memblock_is_map_memory() check for ZONE_DEVICE based
-	 * addresses will always fail. Even the normal hotplugged
-	 * memory will never have MEMBLOCK_NOMAP flag set in their
-	 * memblock entries. Skip memblock search for all non early
-	 * memory sections covering all of hotplug memory including
-	 * both normal and ZONE_DEVICE based.
-	 */
-	if (!early_section(ms))
-		return pfn_section_valid(ms, pfn);
-}
 #endif
 	return memblock_is_map_memory(addr);
 }

@@ -1242,11 +1242,7 @@ mmci_start_command(struct mmci_host *host, struct mmc_command *cmd, u32 c)
 		if (!cmd->busy_timeout)
 			cmd->busy_timeout = 10 * MSEC_PER_SEC;
 
-		if (cmd->busy_timeout > host->mmc->max_busy_timeout)
-			clks = (unsigned long long)host->mmc->max_busy_timeout * host->cclk;
-		else
-			clks = (unsigned long long)cmd->busy_timeout * host->cclk;
-
+		clks = (unsigned long long)cmd->busy_timeout * host->cclk;
 		do_div(clks, MSEC_PER_SEC);
 		writel_relaxed(clks, host->base + MMCIDATATIMER);
 	}
@@ -2154,10 +2150,6 @@ static int mmci_probe(struct amba_device *dev,
 					       host->variant->busy_dpsm_flag);
 		mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
 	}
-
-	/* Variants with mandatory busy timeout in HW needs R1B responses. */
-	if (variant->busy_timeout)
-		mmc->caps |= MMC_CAP_NEED_RSP_BUSY;
 
 	/* Prepare a CMD12 - needed to clear the DPSM on some variants. */
 	host->stop_abort.opcode = MMC_STOP_TRANSMISSION;

@@ -8556,17 +8556,9 @@ static void bnxt_setup_inta(struct bnxt *bp)
 	bp->irq_tbl[0].handler = bnxt_inta;
 }
 
-static int bnxt_init_int_mode(struct bnxt *bp);
-
 static int bnxt_setup_int_mode(struct bnxt *bp)
 {
 	int rc;
-
-	if (!bp->irq_tbl) {
-		rc = bnxt_init_int_mode(bp);
-		if (rc || !bp->irq_tbl)
-			return rc ?: -ENODEV;
-	}
 
 	if (bp->flags & BNXT_FLAG_USING_MSIX)
 		bnxt_setup_msix(bp);
@@ -8752,7 +8744,7 @@ static int bnxt_init_inta(struct bnxt *bp)
 
 static int bnxt_init_int_mode(struct bnxt *bp)
 {
-	int rc = -ENODEV;
+	int rc = 0;
 
 	if (bp->flags & BNXT_FLAG_MSIX_CAP)
 		rc = bnxt_init_msix(bp);
@@ -9522,8 +9514,7 @@ static int bnxt_hwrm_if_change(struct bnxt *bp, bool up)
 {
 	struct hwrm_func_drv_if_change_output *resp = bp->hwrm_cmd_resp_addr;
 	struct hwrm_func_drv_if_change_input req = {0};
-	bool fw_reset = !bp->irq_tbl;
-	bool resc_reinit = false;
+	bool resc_reinit = false, fw_reset = false;
 	int rc, retry = 0;
 	u32 flags = 0;
 
@@ -9566,7 +9557,6 @@ static int bnxt_hwrm_if_change(struct bnxt *bp, bool up)
 
 	if (test_bit(BNXT_STATE_IN_FW_RESET, &bp->state) && !fw_reset) {
 		netdev_err(bp->dev, "RESET_DONE not set during FW reset.\n");
-		set_bit(BNXT_STATE_ABORT_ERR, &bp->state);
 		return -ENODEV;
 	}
 	if (resc_reinit || fw_reset) {
@@ -9899,9 +9889,6 @@ static int bnxt_reinit_after_abort(struct bnxt *bp)
 
 	if (test_bit(BNXT_STATE_IN_FW_RESET, &bp->state))
 		return -EBUSY;
-
-	if (bp->dev->reg_state == NETREG_UNREGISTERED)
-		return -ENODEV;
 
 	rc = bnxt_fw_init_one(bp);
 	if (!rc) {

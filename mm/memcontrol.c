@@ -3287,21 +3287,24 @@ void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size)
 
 #endif /* CONFIG_MEMCG_KMEM */
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /*
- * Because page_memcg(head) is not set on tails, set it now.
+ * Because page_memcg(head) is not set on compound tails, set it now.
  */
-void split_page_memcg(struct page *head, unsigned int nr)
+void mem_cgroup_split_huge_fixup(struct page *head)
 {
 	struct mem_cgroup *memcg = page_memcg(head);
 	int i;
 
-	if (mem_cgroup_disabled() || !memcg)
+	if (mem_cgroup_disabled())
 		return;
 
-	for (i = 1; i < nr; i++)
-		head[i].memcg_data = head->memcg_data;
-	css_get_many(&memcg->css, nr - 1);
+	for (i = 1; i < HPAGE_PMD_NR; i++) {
+		css_get(&memcg->css);
+		head[i].memcg_data = (unsigned long)memcg;
+	}
 }
+#endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 #ifdef CONFIG_MEMCG_SWAP
 /**

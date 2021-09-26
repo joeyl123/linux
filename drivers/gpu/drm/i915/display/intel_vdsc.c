@@ -1014,14 +1014,20 @@ static i915_reg_t dss_ctl1_reg(const struct intel_crtc_state *crtc_state)
 {
 	enum pipe pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
 
-	return is_pipe_dsc(crtc_state) ? ICL_PIPE_DSS_CTL1(pipe) : DSS_CTL1;
+	if (crtc_state->cpu_transcoder == TRANSCODER_EDP)
+		return DSS_CTL1;
+
+	return ICL_PIPE_DSS_CTL1(pipe);
 }
 
 static i915_reg_t dss_ctl2_reg(const struct intel_crtc_state *crtc_state)
 {
 	enum pipe pipe = to_intel_crtc(crtc_state->uapi.crtc)->pipe;
 
-	return is_pipe_dsc(crtc_state) ? ICL_PIPE_DSS_CTL2(pipe) : DSS_CTL2;
+	if (crtc_state->cpu_transcoder == TRANSCODER_EDP)
+		return DSS_CTL2;
+
+	return ICL_PIPE_DSS_CTL2(pipe);
 }
 
 void intel_dsc_enable(struct intel_encoder *encoder,

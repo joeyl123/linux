@@ -290,7 +290,6 @@ static int dp83822_config_intr(struct phy_device *phydev)
 
 static irqreturn_t dp83822_handle_interrupt(struct phy_device *phydev)
 {
-	bool trigger_machine = false;
 	int irq_status;
 
 	/* The MISR1 and MISR2 registers are holding the interrupt status in
@@ -306,7 +305,7 @@ static irqreturn_t dp83822_handle_interrupt(struct phy_device *phydev)
 		return IRQ_NONE;
 	}
 	if (irq_status & ((irq_status & GENMASK(7, 0)) << 8))
-		trigger_machine = true;
+		goto trigger_machine;
 
 	irq_status = phy_read(phydev, MII_DP83822_MISR2);
 	if (irq_status < 0) {
@@ -314,11 +313,11 @@ static irqreturn_t dp83822_handle_interrupt(struct phy_device *phydev)
 		return IRQ_NONE;
 	}
 	if (irq_status & ((irq_status & GENMASK(7, 0)) << 8))
-		trigger_machine = true;
+		goto trigger_machine;
 
-	if (!trigger_machine)
-		return IRQ_NONE;
+	return IRQ_NONE;
 
+trigger_machine:
 	phy_trigger_machine(phydev);
 
 	return IRQ_HANDLED;

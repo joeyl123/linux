@@ -196,7 +196,7 @@ static int isotp_send_fc(struct sock *sk, int ae, u8 flowstatus)
 	nskb->dev = dev;
 	can_skb_set_owner(nskb, sk);
 	ncf = (struct canfd_frame *)nskb->data;
-	skb_put_zero(nskb, so->ll.mtu);
+	skb_put(nskb, so->ll.mtu);
 
 	/* create & send flow control reply */
 	ncf->can_id = so->txid;
@@ -215,7 +215,8 @@ static int isotp_send_fc(struct sock *sk, int ae, u8 flowstatus)
 	if (ae)
 		ncf->data[0] = so->opt.ext_address;
 
-	ncf->flags = so->ll.tx_flags;
+	if (so->ll.mtu == CANFD_MTU)
+		ncf->flags = so->ll.tx_flags;
 
 	can_send_ret = can_send(nskb, 1);
 	if (can_send_ret)
@@ -779,7 +780,7 @@ isotp_tx_burst:
 		can_skb_prv(skb)->skbcnt = 0;
 
 		cf = (struct canfd_frame *)skb->data;
-		skb_put_zero(skb, so->ll.mtu);
+		skb_put(skb, so->ll.mtu);
 
 		/* create consecutive frame */
 		isotp_fill_dataframe(cf, so, ae, 0);
@@ -789,7 +790,8 @@ isotp_tx_burst:
 		so->tx.sn %= 16;
 		so->tx.bs++;
 
-		cf->flags = so->ll.tx_flags;
+		if (so->ll.mtu == CANFD_MTU)
+			cf->flags = so->ll.tx_flags;
 
 		skb->dev = dev;
 		can_skb_set_owner(skb, sk);
@@ -895,7 +897,7 @@ static int isotp_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	so->tx.idx = 0;
 
 	cf = (struct canfd_frame *)skb->data;
-	skb_put_zero(skb, so->ll.mtu);
+	skb_put(skb, so->ll.mtu);
 
 	/* check for single frame transmission depending on TX_DL */
 	if (size <= so->tx.ll_dl - SF_PCI_SZ4 - ae - off) {
@@ -937,7 +939,8 @@ static int isotp_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	}
 
 	/* send the first or only CAN frame */
-	cf->flags = so->ll.tx_flags;
+	if (so->ll.mtu == CANFD_MTU)
+		cf->flags = so->ll.tx_flags;
 
 	skb->dev = dev;
 	skb->sk = sk;
@@ -1225,8 +1228,7 @@ static int isotp_setsockopt(struct socket *sock, int level, int optname,
 			if (ll.mtu != CAN_MTU && ll.mtu != CANFD_MTU)
 				return -EINVAL;
 
-			if (ll.mtu == CAN_MTU &&
-			    (ll.tx_dl > CAN_MAX_DLEN || ll.tx_flags != 0))
+			if (ll.mtu == CAN_MTU && ll.tx_dl > CAN_MAX_DLEN)
 				return -EINVAL;
 
 			memcpy(&so->ll, &ll, sizeof(ll));

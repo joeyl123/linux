@@ -2,7 +2,7 @@
 VERSION = 5
 PATCHLEVEL = 12
 SUBLEVEL = 0
-EXTRAVERSION = -rc5
+EXTRAVERSION = -rc2
 NAME = Frozen Wasteland
 
 # *DOCUMENTATION*
@@ -264,8 +264,7 @@ no-dot-config-targets := $(clean-targets) \
 			 $(version_h) headers headers_% archheaders archscripts \
 			 %asm-generic kernelversion %src-pkg dt_binding_check \
 			 outputmakefile
-no-sync-config-targets := $(no-dot-config-targets) %install kernelrelease \
-			  image_name
+no-sync-config-targets := $(no-dot-config-targets) %install kernelrelease
 single-targets := %.a %.i %.ko %.lds %.ll %.lst %.mod %.o %.s %.symtypes %/
 
 config-build	:=
@@ -479,7 +478,6 @@ USERINCLUDE    := \
 		-I$(objtree)/arch/$(SRCARCH)/include/generated/uapi \
 		-I$(srctree)/include/uapi \
 		-I$(objtree)/include/generated/uapi \
-                -include $(srctree)/include/linux/compiler-version.h \
                 -include $(srctree)/include/linux/kconfig.h
 
 # Use LINUXINCLUDE when you must reference the include/ directory.

@@ -128,8 +128,7 @@ static noinstr bool __do_fast_syscall_32(struct pt_regs *regs)
 		regs->ax = -EFAULT;
 
 		instrumentation_end();
-		local_irq_disable();
-		irqentry_exit_to_user_mode(regs);
+		syscall_exit_to_user_mode(regs);
 		return false;
 	}
 

@@ -51,6 +51,7 @@
 
 #define XENBUS_MAX_RING_GRANT_ORDER 4
 #define XENBUS_MAX_RING_GRANTS      (1U << XENBUS_MAX_RING_GRANT_ORDER)
+#define INVALID_GRANT_HANDLE       (~0U)
 
 /* Register callback to watch this node. */
 struct xenbus_watch

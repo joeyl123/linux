@@ -1028,10 +1028,13 @@ int amdgpu_bo_evict_vram(struct amdgpu_device *adev)
 {
 	struct ttm_resource_manager *man;
 
-	if (adev->in_s3 && (adev->flags & AMD_IS_APU)) {
-		/* No need to evict vram on APUs for suspend to ram */
+	/* late 2.6.33 fix IGP hibernate - we need pm ops to do this correct */
+#ifndef CONFIG_HIBERNATION
+	if (adev->flags & AMD_IS_APU) {
+		/* Useless to evict on IGP chips */
 		return 0;
 	}
+#endif
 
 	man = ttm_manager_type(&adev->mman.bdev, TTM_PL_VRAM);
 	return ttm_resource_manager_evict_all(&adev->mman.bdev, man);

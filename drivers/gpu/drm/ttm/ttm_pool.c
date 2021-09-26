@@ -268,13 +268,13 @@ static void ttm_pool_type_init(struct ttm_pool_type *pt, struct ttm_pool *pool,
 /* Remove a pool_type from the global shrinker list and free all pages */
 static void ttm_pool_type_fini(struct ttm_pool_type *pt)
 {
-	struct page *p;
+	struct page *p, *tmp;
 
 	mutex_lock(&shrinker_lock);
 	list_del(&pt->shrinker_list);
 	mutex_unlock(&shrinker_lock);
 
-	while ((p = ttm_pool_type_take(pt)))
+	list_for_each_entry_safe(p, tmp, &pt->pages, lru)
 		ttm_pool_free_page(pt->pool, pt->caching, pt->order, p);
 }
 

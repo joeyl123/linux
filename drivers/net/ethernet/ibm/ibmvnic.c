@@ -78,6 +78,7 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION(IBMVNIC_DRIVER_VERSION);
 
 static int ibmvnic_version = IBMVNIC_INITIAL_VERSION;
+static int ibmvnic_remove(struct vio_dev *);
 static void release_sub_crqs(struct ibmvnic_adapter *, bool);
 static int ibmvnic_reset_crq(struct ibmvnic_adapter *);
 static int ibmvnic_send_crq_init(struct ibmvnic_adapter *);
@@ -1905,9 +1906,10 @@ static int ibmvnic_set_mac(struct net_device *netdev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
-	ether_addr_copy(adapter->mac_addr, addr->sa_data);
-	if (adapter->state != VNIC_PROBED)
+	if (adapter->state != VNIC_PROBED) {
+		ether_addr_copy(adapter->mac_addr, addr->sa_data);
 		rc = __ibmvnic_set_mac(netdev, addr->sa_data);
+	}
 
 	return rc;
 }
@@ -5217,14 +5219,16 @@ static int ibmvnic_reset_init(struct ibmvnic_adapter *adapter, bool reset)
 {
 	struct device *dev = &adapter->vdev->dev;
 	unsigned long timeout = msecs_to_jiffies(20000);
-	u64 old_num_rx_queues = adapter->req_rx_queues;
-	u64 old_num_tx_queues = adapter->req_tx_queues;
+	u64 old_num_rx_queues, old_num_tx_queues;
 	int rc;
 
 	adapter->from_passive_init = false;
 
-	if (reset)
+	if (reset) {
+		old_num_rx_queues = adapter->req_rx_queues;
+		old_num_tx_queues = adapter->req_tx_queues;
 		reinit_completion(&adapter->init_done);
+	}
 
 	adapter->init_done_rc = 0;
 	rc = ibmvnic_send_crq_init(adapter);
@@ -5392,7 +5396,7 @@ ibmvnic_init_fail:
 	return rc;
 }
 
-static void ibmvnic_remove(struct vio_dev *dev)
+static int ibmvnic_remove(struct vio_dev *dev)
 {
 	struct net_device *netdev = dev_get_drvdata(&dev->dev);
 	struct ibmvnic_adapter *adapter = netdev_priv(netdev);
@@ -5407,9 +5411,9 @@ static void ibmvnic_remove(struct vio_dev *dev)
 	 * after setting state, so __ibmvnic_reset() which is called
 	 * from the flush_work() below, can make progress.
 	 */
-	spin_lock(&adapter->rwi_lock);
+	spin_lock_irqsave(&adapter->rwi_lock, flags);
 	adapter->state = VNIC_REMOVING;
-	spin_unlock(&adapter->rwi_lock);
+	spin_unlock_irqrestore(&adapter->rwi_lock, flags);
 
 	spin_unlock_irqrestore(&adapter->state_lock, flags);
 
@@ -5433,6 +5437,8 @@ static void ibmvnic_remove(struct vio_dev *dev)
 	device_remove_file(&dev->dev, &dev_attr_failover);
 	free_netdev(netdev);
 	dev_set_drvdata(&dev->dev, NULL);
+
+	return 0;
 }
 
 static ssize_t failover_store(struct device *dev, struct device_attribute *attr,

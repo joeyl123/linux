@@ -35,12 +35,14 @@ static struct sk_buff *rtl4a_tag_xmit(struct sk_buff *skb,
 				      struct net_device *dev)
 {
 	struct dsa_port *dp = dsa_slave_to_port(dev);
-	__be16 *p;
 	u8 *tag;
+	u16 *p;
 	u16 out;
 
 	/* Pad out to at least 60 bytes */
-	if (unlikely(__skb_put_padto(skb, ETH_ZLEN, false)))
+	if (unlikely(eth_skb_pad(skb)))
+		return NULL;
+	if (skb_cow_head(skb, RTL4_A_HDR_LEN) < 0)
 		return NULL;
 
 	netdev_dbg(dev, "add realtek tag to package to port %d\n",
@@ -51,13 +53,13 @@ static struct sk_buff *rtl4a_tag_xmit(struct sk_buff *skb,
 	tag = skb->data + 2 * ETH_ALEN;
 
 	/* Set Ethertype */
-	p = (__be16 *)tag;
+	p = (u16 *)tag;
 	*p = htons(RTL4_A_ETHERTYPE);
 
 	out = (RTL4_A_PROTOCOL_RTL8366RB << 12) | (2 << 8);
-	/* The lower bits is the port number */
+	/* The lower bits is the port numer */
 	out |= (u8)dp->index;
-	p = (__be16 *)(tag + 2);
+	p = (u16 *)(tag + 2);
 	*p = htons(out);
 
 	return skb;

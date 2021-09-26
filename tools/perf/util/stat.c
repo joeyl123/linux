@@ -13,7 +13,6 @@
 #include "evlist.h"
 #include "evsel.h"
 #include "thread_map.h"
-#include "hashmap.h"
 #include <linux/zalloc.h>
 
 void update_stats(struct stats *stats, u64 val)
@@ -278,29 +277,18 @@ void evlist__save_aggr_prev_raw_counts(struct evlist *evlist)
 	}
 }
 
-static size_t pkg_id_hash(const void *__key, void *ctx __maybe_unused)
+static void zero_per_pkg(struct evsel *counter)
 {
-	uint64_t *key = (uint64_t *) __key;
-
-	return *key & 0xffffffff;
-}
-
-static bool pkg_id_equal(const void *__key1, const void *__key2,
-			 void *ctx __maybe_unused)
-{
-	uint64_t *key1 = (uint64_t *) __key1;
-	uint64_t *key2 = (uint64_t *) __key2;
-
-	return *key1 == *key2;
+	if (counter->per_pkg_mask)
+		memset(counter->per_pkg_mask, 0, cpu__max_cpu());
 }
 
 static int check_per_pkg(struct evsel *counter,
 			 struct perf_counts_values *vals, int cpu, bool *skip)
 {
-	struct hashmap *mask = counter->per_pkg_mask;
+	unsigned long *mask = counter->per_pkg_mask;
 	struct perf_cpu_map *cpus = evsel__cpus(counter);
-	int s, d, ret = 0;
-	uint64_t *key;
+	int s;
 
 	*skip = false;
 
@@ -311,7 +299,7 @@ static int check_per_pkg(struct evsel *counter,
 		return 0;
 
 	if (!mask) {
-		mask = hashmap__new(pkg_id_hash, pkg_id_equal, NULL);
+		mask = zalloc(cpu__max_cpu());
 		if (!mask)
 			return -ENOMEM;
 
@@ -333,25 +321,8 @@ static int check_per_pkg(struct evsel *counter,
 	if (s < 0)
 		return -1;
 
-	/*
-	 * On multi-die system, die_id > 0. On no-die system, die_id = 0.
-	 * We use hashmap(socket, die) to check the used socket+die pair.
-	 */
-	d = cpu_map__get_die(cpus, cpu, NULL).die;
-	if (d < 0)
-		return -1;
-
-	key = malloc(sizeof(*key));
-	if (!key)
-		return -ENOMEM;
-
-	*key = (uint64_t)d << 32 | s;
-	if (hashmap__find(mask, (void *)key, NULL))
-		*skip = true;
-	else
-		ret = hashmap__add(mask, (void *)key, (void *)1);
-
-	return ret;
+	*skip = test_and_set_bit(s, mask) == 1;
+	return 0;
 }
 
 static int
@@ -451,7 +422,7 @@ int perf_stat_process_counter(struct perf_stat_config *config,
 	}
 
 	if (counter->per_pkg)
-		evsel__zero_per_pkg(counter);
+		zero_per_pkg(counter);
 
 	ret = process_counter_maps(config, counter);
 	if (ret)

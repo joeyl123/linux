@@ -1213,7 +1213,7 @@ static void io_prep_async_work(struct io_kiocb *req)
 	if (req->flags & REQ_F_ISREG) {
 		if (def->hash_reg_file || (ctx->flags & IORING_SETUP_IOPOLL))
 			io_wq_hash_work(&req->work, file_inode(req->file));
-	} else {
+	} else if (!req->file || !S_ISBLK(file_inode(req->file)->i_mode)) {
 		if (def->unbound_nonreg_file)
 			req->work.flags |= IO_WQ_WORK_UNBOUND;
 	}
@@ -6733,21 +6733,24 @@ static int io_sq_thread(void *data)
 		int ret;
 		bool cap_entries, sqt_spin, needs_sched;
 
-		if (test_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state)) {
+		if (test_bit(IO_SQ_THREAD_SHOULD_PARK, &sqd->state) ||
+		    signal_pending(current)) {
+			bool did_sig = false;
+
 			mutex_unlock(&sqd->lock);
+			if (signal_pending(current)) {
+				struct ksignal ksig;
+
+				did_sig = get_signal(&ksig);
+			}
 			cond_resched();
 			mutex_lock(&sqd->lock);
+			if (did_sig)
+				break;
 			io_run_task_work();
 			io_run_task_work_head(&sqd->park_task_work);
 			timeout = jiffies + sqd->sq_thread_idle;
 			continue;
-		}
-		if (signal_pending(current)) {
-			struct ksignal ksig;
-
-			if (!get_signal(&ksig))
-				continue;
-			break;
 		}
 		sqt_spin = false;
 		cap_entries = !list_is_singular(&sqd->ctx_list);
@@ -8603,9 +8606,9 @@ static bool io_kill_timeouts(struct io_ring_ctx *ctx, struct task_struct *tsk,
 			canceled++;
 		}
 	}
-	io_commit_cqring(ctx);
+	if (canceled != 0)
+		io_commit_cqring(ctx);
 	spin_unlock_irq(&ctx->completion_lock);
-
 	if (canceled != 0)
 		io_cqring_ev_posted(ctx);
 	return canceled != 0;
@@ -9002,6 +9005,8 @@ void __io_uring_task_cancel(void)
 
 	/* make sure overflow events are dropped */
 	atomic_inc(&tctx->in_idle);
+	__io_uring_files_cancel(NULL);
+
 	do {
 		/* read completions before cancelations */
 		inflight = tctx_inflight(tctx);
