@@ -1,132 +1,226 @@
+diff --git a/MAINTAINERS b/MAINTAINERS
+index fb2a3633b719..6e91994b8d3b 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -15627,8 +15627,8 @@ F:	Documentation/s390/pci.rst
+ 
+ S390 VFIO AP DRIVER
+ M:	Tony Krowiak <akrowiak@linux.ibm.com>
+-M:	Pierre Morel <pmorel@linux.ibm.com>
+ M:	Halil Pasic <pasic@linux.ibm.com>
++M:	Jason Herne <jjherne@linux.ibm.com>
+ L:	linux-s390@vger.kernel.org
+ S:	Supported
+ W:	http://www.ibm.com/developerworks/linux/linux390/
+@@ -15640,6 +15640,7 @@ F:	drivers/s390/crypto/vfio_ap_private.h
+ S390 VFIO-CCW DRIVER
+ M:	Cornelia Huck <cohuck@redhat.com>
+ M:	Eric Farman <farman@linux.ibm.com>
++M:	Matthew Rosato <mjrosato@linux.ibm.com>
+ R:	Halil Pasic <pasic@linux.ibm.com>
+ L:	linux-s390@vger.kernel.org
+ L:	kvm@vger.kernel.org
+@@ -15650,6 +15651,7 @@ F:	include/uapi/linux/vfio_ccw.h
+ 
+ S390 VFIO-PCI DRIVER
+ M:	Matthew Rosato <mjrosato@linux.ibm.com>
++M:	Eric Farman <farman@linux.ibm.com>
+ L:	linux-s390@vger.kernel.org
+ L:	kvm@vger.kernel.org
+ S:	Supported
 diff --git a/arch/arm64/include/asm/kvm_arm.h b/arch/arm64/include/asm/kvm_arm.h
-index 4e90c2debf70..94d4025acc0b 100644
+index 94d4025acc0b..4e90c2debf70 100644
 --- a/arch/arm64/include/asm/kvm_arm.h
 +++ b/arch/arm64/include/asm/kvm_arm.h
-@@ -278,6 +278,7 @@
+@@ -278,7 +278,6 @@
  #define CPTR_EL2_DEFAULT	CPTR_EL2_RES1
  
  /* Hyp Debug Configuration Register bits */
-+#define MDCR_EL2_TTRF		(1 << 19)
+-#define MDCR_EL2_TTRF		(1 << 19)
  #define MDCR_EL2_TPMS		(1 << 14)
  #define MDCR_EL2_E2PB_MASK	(UL(0x3))
  #define MDCR_EL2_E2PB_SHIFT	(UL(12))
 diff --git a/arch/arm64/kernel/cpufeature.c b/arch/arm64/kernel/cpufeature.c
-index 2a5d9854d664..e5281e1c8f1d 100644
+index e5281e1c8f1d..2a5d9854d664 100644
 --- a/arch/arm64/kernel/cpufeature.c
 +++ b/arch/arm64/kernel/cpufeature.c
-@@ -383,7 +383,6 @@ static const struct arm64_ftr_bits ftr_id_aa64dfr0[] = {
+@@ -383,6 +383,7 @@ static const struct arm64_ftr_bits ftr_id_aa64dfr0[] = {
  	 * of support.
  	 */
  	S_ARM64_FTR_BITS(FTR_HIDDEN, FTR_NONSTRICT, FTR_EXACT, ID_AA64DFR0_PMUVER_SHIFT, 4, 0),
--	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, ID_AA64DFR0_TRACEVER_SHIFT, 4, 0),
++	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, ID_AA64DFR0_TRACEVER_SHIFT, 4, 0),
  	ARM64_FTR_BITS(FTR_HIDDEN, FTR_STRICT, FTR_EXACT, ID_AA64DFR0_DEBUGVER_SHIFT, 4, 0x6),
  	ARM64_FTR_END,
  };
 diff --git a/arch/arm64/kvm/debug.c b/arch/arm64/kvm/debug.c
-index 7a7e425616b5..dbc890511631 100644
+index dbc890511631..7a7e425616b5 100644
 --- a/arch/arm64/kvm/debug.c
 +++ b/arch/arm64/kvm/debug.c
-@@ -89,6 +89,7 @@ void kvm_arm_reset_debug_ptr(struct kvm_vcpu *vcpu)
+@@ -89,7 +89,6 @@ void kvm_arm_reset_debug_ptr(struct kvm_vcpu *vcpu)
   *  - Debug ROM Address (MDCR_EL2_TDRA)
   *  - OS related registers (MDCR_EL2_TDOSA)
   *  - Statistical profiler (MDCR_EL2_TPMS/MDCR_EL2_E2PB)
-+ *  - Self-hosted Trace Filter controls (MDCR_EL2_TTRF)
+- *  - Self-hosted Trace Filter controls (MDCR_EL2_TTRF)
   *
   * Additionally, KVM only traps guest accesses to the debug registers if
   * the guest is not actively using them (see the KVM_ARM64_DEBUG_DIRTY
-@@ -112,6 +113,7 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
+@@ -113,7 +112,6 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu)
  	vcpu->arch.mdcr_el2 = __this_cpu_read(mdcr_el2) & MDCR_EL2_HPMN_MASK;
  	vcpu->arch.mdcr_el2 |= (MDCR_EL2_TPM |
  				MDCR_EL2_TPMS |
-+				MDCR_EL2_TTRF |
+-				MDCR_EL2_TTRF |
  				MDCR_EL2_TPMCR |
  				MDCR_EL2_TDRA |
  				MDCR_EL2_TDOSA);
 diff --git a/arch/arm64/kvm/hyp/vgic-v3-sr.c b/arch/arm64/kvm/hyp/vgic-v3-sr.c
-index ee3682b9873c..39f8f7f9227c 100644
+index 39f8f7f9227c..ee3682b9873c 100644
 --- a/arch/arm64/kvm/hyp/vgic-v3-sr.c
 +++ b/arch/arm64/kvm/hyp/vgic-v3-sr.c
-@@ -429,6 +429,13 @@ u64 __vgic_v3_get_gic_config(void)
+@@ -429,13 +429,6 @@ u64 __vgic_v3_get_gic_config(void)
  	if (has_vhe())
  		flags = local_daif_save();
  
-+	/*
-+	 * Table 11-2 "Permitted ICC_SRE_ELx.SRE settings" indicates
-+	 * that to be able to set ICC_SRE_EL1.SRE to 0, all the
-+	 * interrupt overrides must be set. You've got to love this.
-+	 */
-+	sysreg_clear_set(hcr_el2, 0, HCR_AMO | HCR_FMO | HCR_IMO);
-+	isb();
+-	/*
+-	 * Table 11-2 "Permitted ICC_SRE_ELx.SRE settings" indicates
+-	 * that to be able to set ICC_SRE_EL1.SRE to 0, all the
+-	 * interrupt overrides must be set. You've got to love this.
+-	 */
+-	sysreg_clear_set(hcr_el2, 0, HCR_AMO | HCR_FMO | HCR_IMO);
+-	isb();
  	write_gicreg(0, ICC_SRE_EL1);
  	isb();
  
-@@ -436,6 +443,8 @@ u64 __vgic_v3_get_gic_config(void)
+@@ -443,8 +436,6 @@ u64 __vgic_v3_get_gic_config(void)
  
  	write_gicreg(sre, ICC_SRE_EL1);
  	isb();
-+	sysreg_clear_set(hcr_el2, HCR_AMO | HCR_FMO | HCR_IMO, 0);
-+	isb();
+-	sysreg_clear_set(hcr_el2, HCR_AMO | HCR_FMO | HCR_IMO, 0);
+-	isb();
  
  	if (has_vhe())
  		local_daif_restore(flags);
+diff --git a/arch/mips/kernel/setup.c b/arch/mips/kernel/setup.c
+index 279be0153f8b..23a140327a0b 100644
+--- a/arch/mips/kernel/setup.c
++++ b/arch/mips/kernel/setup.c
+@@ -43,7 +43,7 @@
+ #include <asm/prom.h>
+ 
+ #ifdef CONFIG_MIPS_ELF_APPENDED_DTB
+-const char __section(".appended_dtb") __appended_dtb[0x100000];
++char __section(".appended_dtb") __appended_dtb[0x100000];
+ #endif /* CONFIG_MIPS_ELF_APPENDED_DTB */
+ 
+ struct cpuinfo_mips cpu_data[NR_CPUS] __read_mostly;
+diff --git a/arch/s390/include/asm/vdso/data.h b/arch/s390/include/asm/vdso/data.h
+index 7b3cdb4a5f48..73ee89142666 100644
+--- a/arch/s390/include/asm/vdso/data.h
++++ b/arch/s390/include/asm/vdso/data.h
+@@ -6,7 +6,7 @@
+ #include <vdso/datapage.h>
+ 
+ struct arch_vdso_data {
+-	__u64 tod_steering_delta;
++	__s64 tod_steering_delta;
+ 	__u64 tod_steering_end;
+ };
+ 
+diff --git a/arch/s390/kernel/time.c b/arch/s390/kernel/time.c
+index 165da961f901..326cb8f75f58 100644
+--- a/arch/s390/kernel/time.c
++++ b/arch/s390/kernel/time.c
+@@ -80,10 +80,12 @@ void __init time_early_init(void)
+ {
+ 	struct ptff_qto qto;
+ 	struct ptff_qui qui;
++	int cs;
+ 
+ 	/* Initialize TOD steering parameters */
+ 	tod_steering_end = tod_clock_base.tod;
+-	vdso_data->arch_data.tod_steering_end = tod_steering_end;
++	for (cs = 0; cs < CS_BASES; cs++)
++		vdso_data[cs].arch_data.tod_steering_end = tod_steering_end;
+ 
+ 	if (!test_facility(28))
+ 		return;
+@@ -366,6 +368,7 @@ static void clock_sync_global(unsigned long delta)
+ {
+ 	unsigned long now, adj;
+ 	struct ptff_qto qto;
++	int cs;
+ 
+ 	/* Fixup the monotonic sched clock. */
+ 	tod_clock_base.eitod += delta;
+@@ -381,7 +384,10 @@ static void clock_sync_global(unsigned long delta)
+ 		panic("TOD clock sync offset %li is too large to drift\n",
+ 		      tod_steering_delta);
+ 	tod_steering_end = now + (abs(tod_steering_delta) << 15);
+-	vdso_data->arch_data.tod_steering_end = tod_steering_end;
++	for (cs = 0; cs < CS_BASES; cs++) {
++		vdso_data[cs].arch_data.tod_steering_end = tod_steering_end;
++		vdso_data[cs].arch_data.tod_steering_delta = tod_steering_delta;
++	}
+ 
+ 	/* Update LPAR offset. */
+ 	if (ptff_query(PTFF_QTO) && ptff(&qto, sizeof(qto), PTFF_QTO) == 0)
 diff --git a/arch/x86/kvm/Makefile b/arch/x86/kvm/Makefile
-index 1b4766fe1de2..eafc4d601f25 100644
+index eafc4d601f25..1b4766fe1de2 100644
 --- a/arch/x86/kvm/Makefile
 +++ b/arch/x86/kvm/Makefile
 @@ -1,6 +1,6 @@
  # SPDX-License-Identifier: GPL-2.0
  
--ccflags-y += -Iarch/x86/kvm
-+ccflags-y += -I $(srctree)/arch/x86/kvm
+-ccflags-y += -I $(srctree)/arch/x86/kvm
++ccflags-y += -Iarch/x86/kvm
  ccflags-$(CONFIG_KVM_WERROR) += -Werror
  
  ifeq ($(CONFIG_FRAME_POINTER),y)
 diff --git a/arch/x86/kvm/mmu/mmu.c b/arch/x86/kvm/mmu/mmu.c
-index d75524bc8423..486aa94ecf1d 100644
+index 486aa94ecf1d..d75524bc8423 100644
 --- a/arch/x86/kvm/mmu/mmu.c
 +++ b/arch/x86/kvm/mmu/mmu.c
-@@ -5884,6 +5884,7 @@ static void kvm_recover_nx_lpages(struct kvm *kvm)
+@@ -5884,7 +5884,6 @@ static void kvm_recover_nx_lpages(struct kvm *kvm)
  	struct kvm_mmu_page *sp;
  	unsigned int ratio;
  	LIST_HEAD(invalid_list);
-+	bool flush = false;
+-	bool flush = false;
  	ulong to_zap;
  
  	rcu_idx = srcu_read_lock(&kvm->srcu);
-@@ -5905,19 +5906,19 @@ static void kvm_recover_nx_lpages(struct kvm *kvm)
+@@ -5906,19 +5905,19 @@ static void kvm_recover_nx_lpages(struct kvm *kvm)
  				      lpage_disallowed_link);
  		WARN_ON_ONCE(!sp->lpage_disallowed);
  		if (is_tdp_mmu_page(sp)) {
--			kvm_tdp_mmu_zap_gfn_range(kvm, sp->gfn,
--				sp->gfn + KVM_PAGES_PER_HPAGE(sp->role.level));
-+			flush = kvm_tdp_mmu_zap_sp(kvm, sp);
+-			flush = kvm_tdp_mmu_zap_sp(kvm, sp);
++			kvm_tdp_mmu_zap_gfn_range(kvm, sp->gfn,
++				sp->gfn + KVM_PAGES_PER_HPAGE(sp->role.level));
  		} else {
  			kvm_mmu_prepare_zap_page(kvm, sp, &invalid_list);
  			WARN_ON_ONCE(sp->lpage_disallowed);
  		}
  
  		if (need_resched() || rwlock_needbreak(&kvm->mmu_lock)) {
--			kvm_mmu_commit_zap_page(kvm, &invalid_list);
-+			kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
+-			kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
++			kvm_mmu_commit_zap_page(kvm, &invalid_list);
  			cond_resched_rwlock_write(&kvm->mmu_lock);
-+			flush = false;
+-			flush = false;
  		}
  	}
--	kvm_mmu_commit_zap_page(kvm, &invalid_list);
-+	kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
+-	kvm_mmu_remote_flush_or_zap(kvm, &invalid_list, flush);
++	kvm_mmu_commit_zap_page(kvm, &invalid_list);
  
  	write_unlock(&kvm->mmu_lock);
  	srcu_read_unlock(&kvm->srcu, rcu_idx);
 diff --git a/arch/x86/kvm/mmu/tdp_mmu.c b/arch/x86/kvm/mmu/tdp_mmu.c
-index 462b1f71c77f..018d82e73e31 100644
+index 018d82e73e31..462b1f71c77f 100644
 --- a/arch/x86/kvm/mmu/tdp_mmu.c
 +++ b/arch/x86/kvm/mmu/tdp_mmu.c
 @@ -86,7 +86,7 @@ static inline struct kvm_mmu_page *tdp_mmu_next_root(struct kvm *kvm,
  	list_for_each_entry(_root, &_kvm->arch.tdp_mmu_roots, link)
  
  static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
--			  gfn_t start, gfn_t end, bool can_yield);
-+			  gfn_t start, gfn_t end, bool can_yield, bool flush);
+-			  gfn_t start, gfn_t end, bool can_yield, bool flush);
++			  gfn_t start, gfn_t end, bool can_yield);
  
  void kvm_tdp_mmu_free_root(struct kvm *kvm, struct kvm_mmu_page *root)
  {
@@ -134,253 +228,213 @@ index 462b1f71c77f..018d82e73e31 100644
  
  	list_del(&root->link);
  
--	zap_gfn_range(kvm, root, 0, max_gfn, false);
-+	zap_gfn_range(kvm, root, 0, max_gfn, false, false);
+-	zap_gfn_range(kvm, root, 0, max_gfn, false, false);
++	zap_gfn_range(kvm, root, 0, max_gfn, false);
  
  	free_page((unsigned long)root->spt);
  	kmem_cache_free(mmu_page_header_cache, root);
-@@ -668,20 +668,21 @@ static inline bool tdp_mmu_iter_cond_resched(struct kvm *kvm,
+@@ -668,21 +668,20 @@ static inline bool tdp_mmu_iter_cond_resched(struct kvm *kvm,
   * scheduler needs the CPU or there is contention on the MMU lock. If this
   * function cannot yield, it will not release the MMU lock or reschedule and
   * the caller must ensure it does not supply too large a GFN range, or the
-- * operation can cause a soft lockup.
-+ * operation can cause a soft lockup.  Note, in some use cases a flush may be
-+ * required by prior actions.  Ensure the pending flush is performed prior to
-+ * yielding.
+- * operation can cause a soft lockup.  Note, in some use cases a flush may be
+- * required by prior actions.  Ensure the pending flush is performed prior to
+- * yielding.
++ * operation can cause a soft lockup.
   */
  static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
--			  gfn_t start, gfn_t end, bool can_yield)
-+			  gfn_t start, gfn_t end, bool can_yield, bool flush)
+-			  gfn_t start, gfn_t end, bool can_yield, bool flush)
++			  gfn_t start, gfn_t end, bool can_yield)
  {
  	struct tdp_iter iter;
--	bool flush_needed = false;
++	bool flush_needed = false;
  
  	rcu_read_lock();
  
  	tdp_root_for_each_pte(iter, root, start, end) {
  		if (can_yield &&
--		    tdp_mmu_iter_cond_resched(kvm, &iter, flush_needed)) {
--			flush_needed = false;
-+		    tdp_mmu_iter_cond_resched(kvm, &iter, flush)) {
-+			flush = false;
+-		    tdp_mmu_iter_cond_resched(kvm, &iter, flush)) {
+-			flush = false;
++		    tdp_mmu_iter_cond_resched(kvm, &iter, flush_needed)) {
++			flush_needed = false;
  			continue;
  		}
  
-@@ -699,11 +700,11 @@ static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
+@@ -700,11 +699,11 @@ static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
  			continue;
  
  		tdp_mmu_set_spte(kvm, &iter, 0);
--		flush_needed = true;
-+		flush = true;
+-		flush = true;
++		flush_needed = true;
  	}
  
  	rcu_read_unlock();
--	return flush_needed;
-+	return flush;
+-	return flush;
++	return flush_needed;
  }
  
  /*
-@@ -712,13 +713,14 @@ static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
+@@ -713,14 +712,13 @@ static bool zap_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
   * SPTEs have been cleared and a TLB flush is needed before releasing the
   * MMU lock.
   */
--bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end)
-+bool __kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end,
-+				 bool can_yield)
+-bool __kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end,
+-				 bool can_yield)
++bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end)
  {
  	struct kvm_mmu_page *root;
  	bool flush = false;
  
  	for_each_tdp_mmu_root_yield_safe(kvm, root)
--		flush |= zap_gfn_range(kvm, root, start, end, true);
-+		flush = zap_gfn_range(kvm, root, start, end, can_yield, flush);
+-		flush = zap_gfn_range(kvm, root, start, end, can_yield, flush);
++		flush |= zap_gfn_range(kvm, root, start, end, true);
  
  	return flush;
  }
-@@ -930,7 +932,7 @@ static int zap_gfn_range_hva_wrapper(struct kvm *kvm,
+@@ -932,7 +930,7 @@ static int zap_gfn_range_hva_wrapper(struct kvm *kvm,
  				     struct kvm_mmu_page *root, gfn_t start,
  				     gfn_t end, unsigned long unused)
  {
--	return zap_gfn_range(kvm, root, start, end, false);
-+	return zap_gfn_range(kvm, root, start, end, false, false);
+-	return zap_gfn_range(kvm, root, start, end, false, false);
++	return zap_gfn_range(kvm, root, start, end, false);
  }
  
  int kvm_tdp_mmu_zap_hva_range(struct kvm *kvm, unsigned long start,
 diff --git a/arch/x86/kvm/mmu/tdp_mmu.h b/arch/x86/kvm/mmu/tdp_mmu.h
-index 3b761c111bff..31096ece9b14 100644
+index 31096ece9b14..3b761c111bff 100644
 --- a/arch/x86/kvm/mmu/tdp_mmu.h
 +++ b/arch/x86/kvm/mmu/tdp_mmu.h
-@@ -8,7 +8,29 @@
+@@ -8,29 +8,7 @@
  hpa_t kvm_tdp_mmu_get_vcpu_root_hpa(struct kvm_vcpu *vcpu);
  void kvm_tdp_mmu_free_root(struct kvm *kvm, struct kvm_mmu_page *root);
  
--bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end);
-+bool __kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end,
-+				 bool can_yield);
-+static inline bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start,
-+					     gfn_t end)
-+{
-+	return __kvm_tdp_mmu_zap_gfn_range(kvm, start, end, true);
-+}
-+static inline bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
-+{
-+	gfn_t end = sp->gfn + KVM_PAGES_PER_HPAGE(sp->role.level);
-+
-+	/*
-+	 * Don't allow yielding, as the caller may have a flush pending.  Note,
-+	 * if mmu_lock is held for write, zapping will never yield in this case,
-+	 * but explicitly disallow it for safety.  The TDP MMU does not yield
-+	 * until it has made forward progress (steps sideways), and when zapping
-+	 * a single shadow page that it's guaranteed to see (thus the mmu_lock
-+	 * requirement), its "step sideways" will always step beyond the bounds
-+	 * of the shadow page's gfn range and stop iterating before yielding.
-+	 */
-+	lockdep_assert_held_write(&kvm->mmu_lock);
-+	return __kvm_tdp_mmu_zap_gfn_range(kvm, sp->gfn, end, false);
-+}
+-bool __kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end,
+-				 bool can_yield);
+-static inline bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start,
+-					     gfn_t end)
+-{
+-	return __kvm_tdp_mmu_zap_gfn_range(kvm, start, end, true);
+-}
+-static inline bool kvm_tdp_mmu_zap_sp(struct kvm *kvm, struct kvm_mmu_page *sp)
+-{
+-	gfn_t end = sp->gfn + KVM_PAGES_PER_HPAGE(sp->role.level);
+-
+-	/*
+-	 * Don't allow yielding, as the caller may have a flush pending.  Note,
+-	 * if mmu_lock is held for write, zapping will never yield in this case,
+-	 * but explicitly disallow it for safety.  The TDP MMU does not yield
+-	 * until it has made forward progress (steps sideways), and when zapping
+-	 * a single shadow page that it's guaranteed to see (thus the mmu_lock
+-	 * requirement), its "step sideways" will always step beyond the bounds
+-	 * of the shadow page's gfn range and stop iterating before yielding.
+-	 */
+-	lockdep_assert_held_write(&kvm->mmu_lock);
+-	return __kvm_tdp_mmu_zap_gfn_range(kvm, sp->gfn, end, false);
+-}
++bool kvm_tdp_mmu_zap_gfn_range(struct kvm *kvm, gfn_t start, gfn_t end);
  void kvm_tdp_mmu_zap_all(struct kvm *kvm);
  
  int kvm_tdp_mmu_map(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 diff --git a/arch/x86/kvm/svm/pmu.c b/arch/x86/kvm/svm/pmu.c
-index 035da07500e8..fdf587f19c5f 100644
+index fdf587f19c5f..035da07500e8 100644
 --- a/arch/x86/kvm/svm/pmu.c
 +++ b/arch/x86/kvm/svm/pmu.c
-@@ -98,6 +98,8 @@ static enum index msr_to_index(u32 msr)
+@@ -98,8 +98,6 @@ static enum index msr_to_index(u32 msr)
  static inline struct kvm_pmc *get_gp_pmc_amd(struct kvm_pmu *pmu, u32 msr,
  					     enum pmu_type type)
  {
-+	struct kvm_vcpu *vcpu = pmu_to_vcpu(pmu);
-+
+-	struct kvm_vcpu *vcpu = pmu_to_vcpu(pmu);
+-
  	switch (msr) {
  	case MSR_F15H_PERF_CTL0:
  	case MSR_F15H_PERF_CTL1:
-@@ -105,6 +107,9 @@ static inline struct kvm_pmc *get_gp_pmc_amd(struct kvm_pmu *pmu, u32 msr,
+@@ -107,9 +105,6 @@ static inline struct kvm_pmc *get_gp_pmc_amd(struct kvm_pmu *pmu, u32 msr,
  	case MSR_F15H_PERF_CTL3:
  	case MSR_F15H_PERF_CTL4:
  	case MSR_F15H_PERF_CTL5:
-+		if (!guest_cpuid_has(vcpu, X86_FEATURE_PERFCTR_CORE))
-+			return NULL;
-+		fallthrough;
+-		if (!guest_cpuid_has(vcpu, X86_FEATURE_PERFCTR_CORE))
+-			return NULL;
+-		fallthrough;
  	case MSR_K7_EVNTSEL0 ... MSR_K7_EVNTSEL3:
  		if (type != PMU_TYPE_EVNTSEL)
  			return NULL;
-@@ -115,6 +120,9 @@ static inline struct kvm_pmc *get_gp_pmc_amd(struct kvm_pmu *pmu, u32 msr,
+@@ -120,9 +115,6 @@ static inline struct kvm_pmc *get_gp_pmc_amd(struct kvm_pmu *pmu, u32 msr,
  	case MSR_F15H_PERF_CTR3:
  	case MSR_F15H_PERF_CTR4:
  	case MSR_F15H_PERF_CTR5:
-+		if (!guest_cpuid_has(vcpu, X86_FEATURE_PERFCTR_CORE))
-+			return NULL;
-+		fallthrough;
+-		if (!guest_cpuid_has(vcpu, X86_FEATURE_PERFCTR_CORE))
+-			return NULL;
+-		fallthrough;
  	case MSR_K7_PERFCTR0 ... MSR_K7_PERFCTR3:
  		if (type != PMU_TYPE_COUNTER)
  			return NULL;
 diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
-index fe806e894212..f7d12fca397b 100644
+index f7d12fca397b..fe806e894212 100644
 --- a/arch/x86/kvm/x86.c
 +++ b/arch/x86/kvm/x86.c
-@@ -271,8 +271,7 @@ static struct kmem_cache *x86_emulator_cache;
+@@ -271,7 +271,8 @@ static struct kmem_cache *x86_emulator_cache;
   * When called, it means the previous get/set msr reached an invalid msr.
   * Return true if we want to ignore/silent this failed msr access.
   */
--static bool kvm_msr_ignored_check(struct kvm_vcpu *vcpu, u32 msr,
--				  u64 data, bool write)
-+static bool kvm_msr_ignored_check(u32 msr, u64 data, bool write)
+-static bool kvm_msr_ignored_check(u32 msr, u64 data, bool write)
++static bool kvm_msr_ignored_check(struct kvm_vcpu *vcpu, u32 msr,
++				  u64 data, bool write)
  {
  	const char *op = write ? "wrmsr" : "rdmsr";
  
-@@ -1445,7 +1444,7 @@ static int do_get_msr_feature(struct kvm_vcpu *vcpu, unsigned index, u64 *data)
+@@ -1444,7 +1445,7 @@ static int do_get_msr_feature(struct kvm_vcpu *vcpu, unsigned index, u64 *data)
  	if (r == KVM_MSR_RET_INVALID) {
  		/* Unconditionally clear the output for simplicity */
  		*data = 0;
--		if (kvm_msr_ignored_check(vcpu, index, 0, false))
-+		if (kvm_msr_ignored_check(index, 0, false))
+-		if (kvm_msr_ignored_check(index, 0, false))
++		if (kvm_msr_ignored_check(vcpu, index, 0, false))
  			r = 0;
  	}
  
-@@ -1620,7 +1619,7 @@ static int kvm_set_msr_ignored_check(struct kvm_vcpu *vcpu,
+@@ -1619,7 +1620,7 @@ static int kvm_set_msr_ignored_check(struct kvm_vcpu *vcpu,
  	int ret = __kvm_set_msr(vcpu, index, data, host_initiated);
  
  	if (ret == KVM_MSR_RET_INVALID)
--		if (kvm_msr_ignored_check(vcpu, index, data, true))
-+		if (kvm_msr_ignored_check(index, data, true))
+-		if (kvm_msr_ignored_check(index, data, true))
++		if (kvm_msr_ignored_check(vcpu, index, data, true))
  			ret = 0;
  
  	return ret;
-@@ -1658,7 +1657,7 @@ static int kvm_get_msr_ignored_check(struct kvm_vcpu *vcpu,
+@@ -1657,7 +1658,7 @@ static int kvm_get_msr_ignored_check(struct kvm_vcpu *vcpu,
  	if (ret == KVM_MSR_RET_INVALID) {
  		/* Unconditionally clear *data for simplicity */
  		*data = 0;
--		if (kvm_msr_ignored_check(vcpu, index, 0, false))
-+		if (kvm_msr_ignored_check(index, 0, false))
+-		if (kvm_msr_ignored_check(index, 0, false))
++		if (kvm_msr_ignored_check(vcpu, index, 0, false))
  			ret = 0;
  	}
  
 diff --git a/arch/x86/kvm/x86.h b/arch/x86/kvm/x86.h
-index 39eb04887141..9035e34aa156 100644
+index 9035e34aa156..39eb04887141 100644
 --- a/arch/x86/kvm/x86.h
 +++ b/arch/x86/kvm/x86.h
-@@ -250,7 +250,6 @@ static inline bool kvm_vcpu_latch_init(struct kvm_vcpu *vcpu)
+@@ -250,6 +250,7 @@ static inline bool kvm_vcpu_latch_init(struct kvm_vcpu *vcpu)
  void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_ofs);
  void kvm_inject_realmode_interrupt(struct kvm_vcpu *vcpu, int irq, int inc_eip);
  
--void kvm_write_tsc(struct kvm_vcpu *vcpu, struct msr_data *msr);
++void kvm_write_tsc(struct kvm_vcpu *vcpu, struct msr_data *msr);
  u64 get_kvmclock_ns(struct kvm *kvm);
  
  int kvm_read_guest_virt(struct kvm_vcpu *vcpu,
 diff --git a/arch/xtensa/kernel/coprocessor.S b/arch/xtensa/kernel/coprocessor.S
-index 45cc0ae0af6f..c426b846beef 100644
+index c426b846beef..45cc0ae0af6f 100644
 --- a/arch/xtensa/kernel/coprocessor.S
 +++ b/arch/xtensa/kernel/coprocessor.S
-@@ -99,6 +99,37 @@
+@@ -99,37 +99,6 @@
  	LOAD_CP_REGS_TAB(6)
  	LOAD_CP_REGS_TAB(7)
  
-+/*
-+ * coprocessor_flush(struct thread_info*, index)
-+ *                             a2        a3
-+ *
-+ * Save coprocessor registers for coprocessor 'index'.
-+ * The register values are saved to or loaded from the coprocessor area 
-+ * inside the task_info structure.
-+ *
-+ * Note that this function doesn't update the coprocessor_owner information!
-+ *
-+ */
-+
-+ENTRY(coprocessor_flush)
-+
-+	/* reserve 4 bytes on stack to save a0 */
-+	abi_entry(4)
-+
-+	s32i	a0, a1, 0
-+	movi	a0, .Lsave_cp_regs_jump_table
-+	addx8	a3, a3, a0
-+	l32i	a4, a3, 4
-+	l32i	a3, a3, 0
-+	add	a2, a2, a4
-+	beqz	a3, 1f
-+	callx0	a3
-+1:	l32i	a0, a1, 0
-+
-+	abi_ret(4)
-+
-+ENDPROC(coprocessor_flush)
-+
- /*
-  * Entry condition:
-  *
-@@ -214,39 +245,6 @@ ENTRY(fast_coprocessor)
- 
- ENDPROC(fast_coprocessor)
- 
--	.text
--
 -/*
 - * coprocessor_flush(struct thread_info*, index)
 - *                             a2        a3
 - *
 - * Save coprocessor registers for coprocessor 'index'.
-- * The register values are saved to or loaded from the coprocessor area
+- * The register values are saved to or loaded from the coprocessor area 
 - * inside the task_info structure.
 - *
 - * Note that this function doesn't update the coprocessor_owner information!
@@ -406,61 +460,282 @@ index 45cc0ae0af6f..c426b846beef 100644
 -
 -ENDPROC(coprocessor_flush)
 -
+ /*
+  * Entry condition:
+  *
+@@ -245,6 +214,39 @@ ENTRY(fast_coprocessor)
+ 
+ ENDPROC(fast_coprocessor)
+ 
++	.text
++
++/*
++ * coprocessor_flush(struct thread_info*, index)
++ *                             a2        a3
++ *
++ * Save coprocessor registers for coprocessor 'index'.
++ * The register values are saved to or loaded from the coprocessor area
++ * inside the task_info structure.
++ *
++ * Note that this function doesn't update the coprocessor_owner information!
++ *
++ */
++
++ENTRY(coprocessor_flush)
++
++	/* reserve 4 bytes on stack to save a0 */
++	abi_entry(4)
++
++	s32i	a0, a1, 0
++	movi	a0, .Lsave_cp_regs_jump_table
++	addx8	a3, a3, a0
++	l32i	a4, a3, 4
++	l32i	a3, a3, 0
++	add	a2, a2, a4
++	beqz	a3, 1f
++	callx0	a3
++1:	l32i	a0, a1, 0
++
++	abi_ret(4)
++
++ENDPROC(coprocessor_flush)
++
  	.data
  
  ENTRY(coprocessor_owner)
 diff --git a/arch/xtensa/mm/fault.c b/arch/xtensa/mm/fault.c
-index 95a74890c7e9..7666408ce12a 100644
+index 7666408ce12a..95a74890c7e9 100644
 --- a/arch/xtensa/mm/fault.c
 +++ b/arch/xtensa/mm/fault.c
-@@ -112,11 +112,8 @@ void do_page_fault(struct pt_regs *regs)
+@@ -112,8 +112,11 @@ void do_page_fault(struct pt_regs *regs)
  	 */
  	fault = handle_mm_fault(vma, address, flags, regs);
  
--	if (fault_signal_pending(fault, regs)) {
--		if (!user_mode(regs))
--			goto bad_page_fault;
-+	if (fault_signal_pending(fault, regs))
+-	if (fault_signal_pending(fault, regs))
++	if (fault_signal_pending(fault, regs)) {
++		if (!user_mode(regs))
++			goto bad_page_fault;
  		return;
--	}
++	}
  
  	if (unlikely(fault & VM_FAULT_ERROR)) {
  		if (fault & VM_FAULT_OOM)
 diff --git a/drivers/block/xen-blkback/blkback.c b/drivers/block/xen-blkback/blkback.c
-index 14e452896d04..1cdf09ff67b6 100644
+index 1cdf09ff67b6..14e452896d04 100644
 --- a/drivers/block/xen-blkback/blkback.c
 +++ b/drivers/block/xen-blkback/blkback.c
 @@ -891,7 +891,7 @@ static int xen_blkbk_map(struct xen_blkif_ring *ring,
  out:
  	for (i = last_map; i < num; i++) {
  		/* Don't zap current batch's valid persistent grants. */
--		if(i >= map_until)
-+		if(i >= last_map + segs_to_map)
+-		if(i >= last_map + segs_to_map)
++		if(i >= map_until)
  			pages[i]->persistent_gnt = NULL;
  		pages[i]->handle = BLKBACK_INVALID_HANDLE;
  	}
+diff --git a/drivers/pinctrl/intel/pinctrl-intel.c b/drivers/pinctrl/intel/pinctrl-intel.c
+index 8085782cd8f9..9f3361c13ded 100644
+--- a/drivers/pinctrl/intel/pinctrl-intel.c
++++ b/drivers/pinctrl/intel/pinctrl-intel.c
+@@ -1357,6 +1357,7 @@ static int intel_pinctrl_add_padgroups_by_gpps(struct intel_pinctrl *pctrl,
+ 				gpps[i].gpio_base = 0;
+ 				break;
+ 			case INTEL_GPIO_BASE_NOMAP:
++				break;
+ 			default:
+ 				break;
+ 		}
+@@ -1393,6 +1394,7 @@ static int intel_pinctrl_add_padgroups_by_size(struct intel_pinctrl *pctrl,
+ 		gpps[i].size = min(gpp_size, npins);
+ 		npins -= gpps[i].size;
+ 
++		gpps[i].gpio_base = gpps[i].base;
+ 		gpps[i].padown_num = padown_num;
+ 
+ 		/*
+@@ -1491,8 +1493,13 @@ static int intel_pinctrl_probe(struct platform_device *pdev,
+ 		if (IS_ERR(regs))
+ 			return PTR_ERR(regs);
+ 
+-		/* Determine community features based on the revision */
++		/*
++		 * Determine community features based on the revision.
++		 * A value of all ones means the device is not present.
++		 */
+ 		value = readl(regs + REVID);
++		if (value == ~0u)
++			return -ENODEV;
+ 		if (((value & REVID_MASK) >> REVID_SHIFT) >= 0x94) {
+ 			community->features |= PINCTRL_FEATURE_DEBOUNCE;
+ 			community->features |= PINCTRL_FEATURE_1K_PD;
+diff --git a/drivers/pinctrl/pinctrl-microchip-sgpio.c b/drivers/pinctrl/pinctrl-microchip-sgpio.c
+index f35edb0eac40..c12fa57ebd12 100644
+--- a/drivers/pinctrl/pinctrl-microchip-sgpio.c
++++ b/drivers/pinctrl/pinctrl-microchip-sgpio.c
+@@ -572,7 +572,7 @@ static void microchip_sgpio_irq_settype(struct irq_data *data,
+ 	/* Type value spread over 2 registers sets: low, high bit */
+ 	sgpio_clrsetbits(bank->priv, REG_INT_TRIGGER, addr.bit,
+ 			 BIT(addr.port), (!!(type & 0x1)) << addr.port);
+-	sgpio_clrsetbits(bank->priv, REG_INT_TRIGGER + SGPIO_MAX_BITS, addr.bit,
++	sgpio_clrsetbits(bank->priv, REG_INT_TRIGGER, SGPIO_MAX_BITS + addr.bit,
+ 			 BIT(addr.port), (!!(type & 0x2)) << addr.port);
+ 
+ 	if (type == SGPIO_INT_TRG_LEVEL)
+diff --git a/drivers/pinctrl/pinctrl-rockchip.c b/drivers/pinctrl/pinctrl-rockchip.c
+index aa1a1c850d05..53a0badc6b03 100644
+--- a/drivers/pinctrl/pinctrl-rockchip.c
++++ b/drivers/pinctrl/pinctrl-rockchip.c
+@@ -3727,12 +3727,15 @@ static int __maybe_unused rockchip_pinctrl_suspend(struct device *dev)
+ static int __maybe_unused rockchip_pinctrl_resume(struct device *dev)
+ {
+ 	struct rockchip_pinctrl *info = dev_get_drvdata(dev);
+-	int ret = regmap_write(info->regmap_base, RK3288_GRF_GPIO6C_IOMUX,
+-			       rk3288_grf_gpio6c_iomux |
+-			       GPIO6C6_SEL_WRITE_ENABLE);
++	int ret;
+ 
+-	if (ret)
+-		return ret;
++	if (info->ctrl->type == RK3288) {
++		ret = regmap_write(info->regmap_base, RK3288_GRF_GPIO6C_IOMUX,
++				   rk3288_grf_gpio6c_iomux |
++				   GPIO6C6_SEL_WRITE_ENABLE);
++		if (ret)
++			return ret;
++	}
+ 
+ 	return pinctrl_force_default(info->pctl_dev);
+ }
+diff --git a/drivers/pinctrl/qcom/pinctrl-lpass-lpi.c b/drivers/pinctrl/qcom/pinctrl-lpass-lpi.c
+index 369ee20a7ea9..2f19ab4db720 100644
+--- a/drivers/pinctrl/qcom/pinctrl-lpass-lpi.c
++++ b/drivers/pinctrl/qcom/pinctrl-lpass-lpi.c
+@@ -392,7 +392,7 @@ static int lpi_config_set(struct pinctrl_dev *pctldev, unsigned int group,
+ 			  unsigned long *configs, unsigned int nconfs)
+ {
+ 	struct lpi_pinctrl *pctrl = dev_get_drvdata(pctldev->dev);
+-	unsigned int param, arg, pullup, strength;
++	unsigned int param, arg, pullup = LPI_GPIO_BIAS_DISABLE, strength = 2;
+ 	bool value, output_enabled = false;
+ 	const struct lpi_pingroup *g;
+ 	unsigned long sval;
+diff --git a/drivers/pinctrl/qcom/pinctrl-sc7280.c b/drivers/pinctrl/qcom/pinctrl-sc7280.c
+index 8daccd530285..9d41abfca37e 100644
+--- a/drivers/pinctrl/qcom/pinctrl-sc7280.c
++++ b/drivers/pinctrl/qcom/pinctrl-sc7280.c
+@@ -1439,14 +1439,14 @@ static const struct msm_pingroup sc7280_groups[] = {
+ 	[172] = PINGROUP(172, qdss, _, _, _, _, _, _, _, _),
+ 	[173] = PINGROUP(173, qdss, _, _, _, _, _, _, _, _),
+ 	[174] = PINGROUP(174, qdss, _, _, _, _, _, _, _, _),
+-	[175] = UFS_RESET(ufs_reset, 0x1be000),
+-	[176] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1b3000, 15, 0),
+-	[177] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1b3000, 13, 6),
+-	[178] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1b3000, 11, 3),
+-	[179] = SDC_QDSD_PINGROUP(sdc1_data, 0x1b3000, 9, 0),
+-	[180] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1b4000, 14, 6),
+-	[181] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1b4000, 11, 3),
+-	[182] = SDC_QDSD_PINGROUP(sdc2_data, 0x1b4000, 9, 0),
++	[175] = UFS_RESET(ufs_reset, 0xbe000),
++	[176] = SDC_QDSD_PINGROUP(sdc1_rclk, 0xb3004, 0, 6),
++	[177] = SDC_QDSD_PINGROUP(sdc1_clk, 0xb3000, 13, 6),
++	[178] = SDC_QDSD_PINGROUP(sdc1_cmd, 0xb3000, 11, 3),
++	[179] = SDC_QDSD_PINGROUP(sdc1_data, 0xb3000, 9, 0),
++	[180] = SDC_QDSD_PINGROUP(sdc2_clk, 0xb4000, 14, 6),
++	[181] = SDC_QDSD_PINGROUP(sdc2_cmd, 0xb4000, 11, 3),
++	[182] = SDC_QDSD_PINGROUP(sdc2_data, 0xb4000, 9, 0),
+ };
+ 
+ static const struct msm_pinctrl_soc_data sc7280_pinctrl = {
+diff --git a/drivers/pinctrl/qcom/pinctrl-sdx55.c b/drivers/pinctrl/qcom/pinctrl-sdx55.c
+index 2b5b0e2b03ad..5aaf57b40407 100644
+--- a/drivers/pinctrl/qcom/pinctrl-sdx55.c
++++ b/drivers/pinctrl/qcom/pinctrl-sdx55.c
+@@ -423,7 +423,7 @@ static const char * const gpio_groups[] = {
+ 
+ static const char * const qdss_stm_groups[] = {
+ 	"gpio0", "gpio1", "gpio2", "gpio3", "gpio4", "gpio5", "gpio6", "gpio7", "gpio12", "gpio13",
+-	"gpio14", "gpio15", "gpio16", "gpio17", "gpio18", "gpio19" "gpio20", "gpio21", "gpio22",
++	"gpio14", "gpio15", "gpio16", "gpio17", "gpio18", "gpio19", "gpio20", "gpio21", "gpio22",
+ 	"gpio23", "gpio44", "gpio45", "gpio52", "gpio53", "gpio56", "gpio57", "gpio61", "gpio62",
+ 	"gpio63", "gpio64", "gpio65", "gpio66",
+ };
+diff --git a/drivers/vfio/pci/Kconfig b/drivers/vfio/pci/Kconfig
+index ac3c1dd3edef..4abddbebd4b2 100644
+--- a/drivers/vfio/pci/Kconfig
++++ b/drivers/vfio/pci/Kconfig
+@@ -42,6 +42,6 @@ config VFIO_PCI_IGD
+ 
+ config VFIO_PCI_NVLINK2
+ 	def_bool y
+-	depends on VFIO_PCI && PPC_POWERNV
++	depends on VFIO_PCI && PPC_POWERNV && SPAPR_TCE_IOMMU
+ 	help
+ 	  VFIO PCI support for P9 Witherspoon machine with NVIDIA V100 GPUs
+diff --git a/drivers/vfio/vfio_iommu_type1.c b/drivers/vfio/vfio_iommu_type1.c
+index be444407664a..45cbfd4879a5 100644
+--- a/drivers/vfio/vfio_iommu_type1.c
++++ b/drivers/vfio/vfio_iommu_type1.c
+@@ -739,6 +739,12 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
+ 	ret = vfio_lock_acct(dma, lock_acct, false);
+ 
+ unpin_out:
++	if (batch->size == 1 && !batch->offset) {
++		/* May be a VM_PFNMAP pfn, which the batch can't remember. */
++		put_pfn(pfn, dma->prot);
++		batch->size = 0;
++	}
++
+ 	if (ret < 0) {
+ 		if (pinned && !rsvd) {
+ 			for (pfn = *pfn_base ; pinned ; pfn++, pinned--)
+diff --git a/fs/reiserfs/xattr.h b/fs/reiserfs/xattr.h
+index 9b3b06da568c..e47fde1182de 100644
+--- a/fs/reiserfs/xattr.h
++++ b/fs/reiserfs/xattr.h
+@@ -44,7 +44,7 @@ void reiserfs_security_free(struct reiserfs_security_handle *sec);
+ 
+ static inline int reiserfs_xattrs_initialized(struct super_block *sb)
+ {
+-	return REISERFS_SB(sb)->priv_root != NULL;
++	return REISERFS_SB(sb)->priv_root && REISERFS_SB(sb)->xattr_root;
+ }
+ 
+ #define xattr_size(size) ((size) + sizeof(struct reiserfs_xattr_header))
+diff --git a/mm/memory.c b/mm/memory.c
+index 5efa07fb6cdc..550405fc3b5e 100644
+--- a/mm/memory.c
++++ b/mm/memory.c
+@@ -166,7 +166,7 @@ static int __init init_zero_pfn(void)
+ 	zero_pfn = page_to_pfn(ZERO_PAGE(0));
+ 	return 0;
+ }
+-core_initcall(init_zero_pfn);
++early_initcall(init_zero_pfn);
+ 
+ void mm_trace_rss_stat(struct mm_struct *mm, int member, long count)
+ {
 diff --git a/tools/kvm/kvm_stat/kvm_stat.service b/tools/kvm/kvm_stat/kvm_stat.service
-index 71aabaffe779..8f13b843d5b4 100644
+index 8f13b843d5b4..71aabaffe779 100644
 --- a/tools/kvm/kvm_stat/kvm_stat.service
 +++ b/tools/kvm/kvm_stat/kvm_stat.service
-@@ -9,6 +9,7 @@ Type=simple
+@@ -9,7 +9,6 @@ Type=simple
  ExecStart=/usr/bin/kvm_stat -dtcz -s 10 -L /var/log/kvm_stat.csv
  ExecReload=/bin/kill -HUP $MAINPID
  Restart=always
-+RestartSec=60s
+-RestartSec=60s
  SyslogIdentifier=kvm_stat
  SyslogLevel=debug
  
 diff --git a/tools/testing/selftests/kvm/hardware_disable_test.c b/tools/testing/selftests/kvm/hardware_disable_test.c
-index 2f2eeb8a1d86..5aadf84c91c0 100644
+index 5aadf84c91c0..2f2eeb8a1d86 100644
 --- a/tools/testing/selftests/kvm/hardware_disable_test.c
 +++ b/tools/testing/selftests/kvm/hardware_disable_test.c
 @@ -108,7 +108,7 @@ static void run_test(uint32_t run)
  	kvm_vm_elf_load(vm, program_invocation_name, 0, 0);
  	vm_create_irqchip(vm);
  
--	fprintf(stderr, "%s: [%d] start vcpus\n", __func__, run);
-+	pr_debug("%s: [%d] start vcpus\n", __func__, run);
+-	pr_debug("%s: [%d] start vcpus\n", __func__, run);
++	fprintf(stderr, "%s: [%d] start vcpus\n", __func__, run);
  	for (i = 0; i < VCPU_NUM; ++i) {
  		vm_vcpu_add_default(vm, i, guest_code);
  		payloads[i].vm = vm;
@@ -468,8 +743,8 @@ index 2f2eeb8a1d86..5aadf84c91c0 100644
  			check_set_affinity(throw_away, &cpu_set);
  		}
  	}
--	fprintf(stderr, "%s: [%d] all threads launched\n", __func__, run);
-+	pr_debug("%s: [%d] all threads launched\n", __func__, run);
+-	pr_debug("%s: [%d] all threads launched\n", __func__, run);
++	fprintf(stderr, "%s: [%d] all threads launched\n", __func__, run);
  	sem_post(sem);
  	for (i = 0; i < VCPU_NUM; ++i)
  		check_join(threads[i], &b);
@@ -477,19 +752,19 @@ index 2f2eeb8a1d86..5aadf84c91c0 100644
  		if (pid == 0)
  			run_test(i); /* This function always exits */
  
--		fprintf(stderr, "%s: [%d] waiting semaphore\n", __func__, i);
-+		pr_debug("%s: [%d] waiting semaphore\n", __func__, i);
+-		pr_debug("%s: [%d] waiting semaphore\n", __func__, i);
++		fprintf(stderr, "%s: [%d] waiting semaphore\n", __func__, i);
  		sem_wait(sem);
  		r = (rand() % DELAY_US_MAX) + 1;
--		fprintf(stderr, "%s: [%d] waiting %dus\n", __func__, i, r);
-+		pr_debug("%s: [%d] waiting %dus\n", __func__, i, r);
+-		pr_debug("%s: [%d] waiting %dus\n", __func__, i, r);
++		fprintf(stderr, "%s: [%d] waiting %dus\n", __func__, i, r);
  		usleep(r);
  		r = waitpid(pid, &s, WNOHANG);
  		TEST_ASSERT(r != pid,
  			    "%s: [%d] child exited unexpectedly status: [%d]",
  			    __func__, i, s);
--		fprintf(stderr, "%s: [%d] killing child\n", __func__, i);
-+		pr_debug("%s: [%d] killing child\n", __func__, i);
+-		pr_debug("%s: [%d] killing child\n", __func__, i);
++		fprintf(stderr, "%s: [%d] killing child\n", __func__, i);
  		kill(pid, SIGKILL);
  	}
  

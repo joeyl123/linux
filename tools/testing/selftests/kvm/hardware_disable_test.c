@@ -108,7 +108,7 @@ static void run_test(uint32_t run)
 	kvm_vm_elf_load(vm, program_invocation_name, 0, 0);
 	vm_create_irqchip(vm);
 
-	pr_debug("%s: [%d] start vcpus\n", __func__, run);
+	fprintf(stderr, "%s: [%d] start vcpus\n", __func__, run);
 	for (i = 0; i < VCPU_NUM; ++i) {
 		vm_vcpu_add_default(vm, i, guest_code);
 		payloads[i].vm = vm;
@@ -124,7 +124,7 @@ static void run_test(uint32_t run)
 			check_set_affinity(throw_away, &cpu_set);
 		}
 	}
-	pr_debug("%s: [%d] all threads launched\n", __func__, run);
+	fprintf(stderr, "%s: [%d] all threads launched\n", __func__, run);
 	sem_post(sem);
 	for (i = 0; i < VCPU_NUM; ++i)
 		check_join(threads[i], &b);
@@ -147,16 +147,16 @@ int main(int argc, char **argv)
 		if (pid == 0)
 			run_test(i); /* This function always exits */
 
-		pr_debug("%s: [%d] waiting semaphore\n", __func__, i);
+		fprintf(stderr, "%s: [%d] waiting semaphore\n", __func__, i);
 		sem_wait(sem);
 		r = (rand() % DELAY_US_MAX) + 1;
-		pr_debug("%s: [%d] waiting %dus\n", __func__, i, r);
+		fprintf(stderr, "%s: [%d] waiting %dus\n", __func__, i, r);
 		usleep(r);
 		r = waitpid(pid, &s, WNOHANG);
 		TEST_ASSERT(r != pid,
 			    "%s: [%d] child exited unexpectedly status: [%d]",
 			    __func__, i, s);
-		pr_debug("%s: [%d] killing child\n", __func__, i);
+		fprintf(stderr, "%s: [%d] killing child\n", __func__, i);
 		kill(pid, SIGKILL);
 	}
 
