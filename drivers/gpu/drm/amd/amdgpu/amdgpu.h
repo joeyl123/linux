@@ -1007,9 +1007,13 @@ struct amdgpu_device {
 
 	/* s3/s4 mask */
 	bool                            in_suspend;
-	bool				in_s3;
-	bool				in_s4;
-	bool				in_s0ix;
+	bool				in_hibernate;
+
+	/*
+	 * The combination flag in_poweroff_reboot_com used to identify the poweroff
+	 * and reboot opt in the s0i3 system-wide suspend.
+	 */
+	bool 				in_poweroff_reboot_com;
 
 	atomic_t 			in_gpu_reset;
 	enum pp_mp1_state               mp1_state;

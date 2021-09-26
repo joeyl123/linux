@@ -39,7 +39,6 @@
 #include "dce_v11_0.h"
 #include "dce_virtual.h"
 #include "ivsrcid/ivsrcid_vislands30.h"
-#include "amdgpu_display.h"
 
 #define DCE_VIRTUAL_VBLANK_PERIOD 16666666
 
@@ -492,24 +491,12 @@ static int dce_virtual_hw_fini(void *handle)
 
 static int dce_virtual_suspend(void *handle)
 {
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	int r;
-
-	r = amdgpu_display_suspend_helper(adev);
-	if (r)
-		return r;
 	return dce_virtual_hw_fini(handle);
 }
 
 static int dce_virtual_resume(void *handle)
 {
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	int r;
-
-	r = dce_virtual_hw_init(handle);
-	if (r)
-		return r;
-	return amdgpu_display_resume_helper(adev);
+	return dce_virtual_hw_init(handle);
 }
 
 static bool dce_virtual_is_idle(void *handle)

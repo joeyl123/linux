@@ -16,6 +16,7 @@
 #include <linux/rculist_nulls.h>
 #include <linux/cpu.h>
 #include <linux/tracehook.h>
+#include <linux/freezer.h>
 
 #include "../kernel/sched/sched.h"
 #include "io-wq.h"
@@ -385,14 +386,13 @@ static struct io_wq_work *io_get_next_work(struct io_wqe *wqe)
 	return NULL;
 }
 
-static bool io_flush_signals(void)
+static void io_flush_signals(void)
 {
-	if (unlikely(test_thread_flag(TIF_NOTIFY_SIGNAL))) {
-		__set_current_state(TASK_RUNNING);
-		tracehook_notify_signal();
-		return true;
+	if (unlikely(test_tsk_thread_flag(current, TIF_NOTIFY_SIGNAL))) {
+		if (current->task_works)
+			task_work_run();
+		clear_tsk_thread_flag(current, TIF_NOTIFY_SIGNAL);
 	}
-	return false;
 }
 
 static void io_assign_current_work(struct io_worker *worker,
@@ -488,8 +488,6 @@ static int io_wqe_worker(void *data)
 	set_task_comm(current, buf);
 
 	while (!test_bit(IO_WQ_BIT_EXIT, &wq->state)) {
-		long ret;
-
 		set_current_state(TASK_INTERRUPTIBLE);
 loop:
 		raw_spin_lock_irq(&wqe->lock);
@@ -499,18 +497,11 @@ loop:
 		}
 		__io_worker_idle(wqe, worker);
 		raw_spin_unlock_irq(&wqe->lock);
-		if (io_flush_signals())
+		io_flush_signals();
+		if (schedule_timeout(WORKER_IDLE_TIMEOUT))
 			continue;
-		ret = schedule_timeout(WORKER_IDLE_TIMEOUT);
-		if (signal_pending(current)) {
-			struct ksignal ksig;
-
-			if (!get_signal(&ksig))
-				continue;
+		if (fatal_signal_pending(current))
 			break;
-		}
-		if (ret)
-			continue;
 		/* timed out, exit unless we're the fixed worker */
 		if (test_bit(IO_WQ_BIT_EXIT, &wq->state) ||
 		    !(worker->flags & IO_WORKER_F_FIXED))
@@ -718,13 +709,8 @@ static int io_wq_manager(void *data)
 		set_current_state(TASK_INTERRUPTIBLE);
 		io_wq_check_workers(wq);
 		schedule_timeout(HZ);
-		if (signal_pending(current)) {
-			struct ksignal ksig;
-
-			if (!get_signal(&ksig))
-				continue;
+		if (fatal_signal_pending(current))
 			set_bit(IO_WQ_BIT_EXIT, &wq->state);
-		}
 	} while (!test_bit(IO_WQ_BIT_EXIT, &wq->state));
 
 	io_wq_check_workers(wq);
@@ -1071,11 +1057,7 @@ static void io_wq_destroy(struct io_wq *wq)
 
 	for_each_node(node) {
 		struct io_wqe *wqe = wq->wqes[node];
-		struct io_cb_cancel_data match = {
-			.fn		= io_wq_work_match_all,
-			.cancel_all	= true,
-		};
-		io_wqe_cancel_pending_work(wqe, &match);
+		WARN_ON_ONCE(!wq_list_empty(&wqe->work_list));
 		kfree(wqe);
 	}
 	io_wq_put_hash(wq->hash);

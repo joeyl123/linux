@@ -17,7 +17,6 @@
 #include <linux/module.h>
 #include <linux/irq.h>
 
-#include <asm/asm-prototypes.h>
 #include <asm/bug.h>
 #include <asm/processor.h>
 #include <asm/ptrace.h>

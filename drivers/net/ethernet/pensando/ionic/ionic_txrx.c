@@ -1079,17 +1079,15 @@ static int ionic_tx_descs_needed(struct ionic_queue *q, struct sk_buff *skb)
 {
 	int sg_elems = q->lif->qtype_info[IONIC_QTYPE_TXQ].max_sg_elems;
 	struct ionic_tx_stats *stats = q_to_tx_stats(q);
-	int ndescs;
 	int err;
 
-	/* Each desc is mss long max, so a descriptor for each gso_seg */
+	/* If TSO, need roundup(skb->len/mss) descs */
 	if (skb_is_gso(skb))
-		ndescs = skb_shinfo(skb)->gso_segs;
-	else
-		ndescs = 1;
+		return (skb->len / skb_shinfo(skb)->gso_size) + 1;
 
+	/* If non-TSO, just need 1 desc and nr_frags sg elems */
 	if (skb_shinfo(skb)->nr_frags <= sg_elems)
-		return ndescs;
+		return 1;
 
 	/* Too many frags, so linearize */
 	err = skb_linearize(skb);
@@ -1098,7 +1096,8 @@ static int ionic_tx_descs_needed(struct ionic_queue *q, struct sk_buff *skb)
 
 	stats->linearize++;
 
-	return ndescs;
+	/* Need 1 desc and zero sg elems */
+	return 1;
 }
 
 static int ionic_maybe_stop_tx(struct ionic_queue *q, int ndescs)

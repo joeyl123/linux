@@ -402,42 +402,35 @@ static pid_t handle_signalfd(struct daemon *daemon)
 	int status;
 	pid_t pid;
 
-	/*
-	 * Take signal fd data as pure signal notification and check all
-	 * the sessions state. The reason is that multiple signals can get
-	 * coalesced in kernel and we can receive only single signal even
-	 * if multiple SIGCHLD were generated.
-	 */
 	err = read(daemon->signal_fd, &si, sizeof(struct signalfd_siginfo));
-	if (err != sizeof(struct signalfd_siginfo)) {
-		pr_err("failed to read signal fd\n");
+	if (err != sizeof(struct signalfd_siginfo))
 		return -1;
-	}
 
 	list_for_each_entry(session, &daemon->sessions, list) {
-		if (session->pid == -1)
+
+		if (session->pid != (int) si.ssi_pid)
 			continue;
 
-		pid = waitpid(session->pid, &status, WNOHANG);
-		if (pid <= 0)
-			continue;
-
-		if (WIFEXITED(status)) {
-			pr_info("session '%s' exited, status=%d\n",
-				session->name, WEXITSTATUS(status));
-		} else if (WIFSIGNALED(status)) {
-			pr_info("session '%s' killed (signal %d)\n",
-				session->name, WTERMSIG(status));
-		} else if (WIFSTOPPED(status)) {
-			pr_info("session '%s' stopped (signal %d)\n",
-				session->name, WSTOPSIG(status));
-		} else {
-			pr_info("session '%s' Unexpected status (0x%x)\n",
-				session->name, status);
+		pid = waitpid(session->pid, &status, 0);
+		if (pid == session->pid) {
+			if (WIFEXITED(status)) {
+				pr_info("session '%s' exited, status=%d\n",
+					session->name, WEXITSTATUS(status));
+			} else if (WIFSIGNALED(status)) {
+				pr_info("session '%s' killed (signal %d)\n",
+					session->name, WTERMSIG(status));
+			} else if (WIFSTOPPED(status)) {
+				pr_info("session '%s' stopped (signal %d)\n",
+					session->name, WSTOPSIG(status));
+			} else {
+				pr_info("session '%s' Unexpected status (0x%x)\n",
+					session->name, status);
+			}
 		}
 
 		session->state = KILL;
 		session->pid = -1;
+		return pid;
 	}
 
 	return 0;
@@ -450,6 +443,7 @@ static int daemon_session__wait(struct daemon_session *session, struct daemon *d
 		.fd	= daemon->signal_fd,
 		.events	= POLLIN,
 	};
+	pid_t wpid = 0, pid = session->pid;
 	time_t start;
 
 	start = time(NULL);
@@ -458,7 +452,7 @@ static int daemon_session__wait(struct daemon_session *session, struct daemon *d
 		int err = poll(&pollfd, 1, 1000);
 
 		if (err > 0) {
-			handle_signalfd(daemon);
+			wpid = handle_signalfd(daemon);
 		} else if (err < 0) {
 			perror("failed: poll\n");
 			return -1;
@@ -466,7 +460,7 @@ static int daemon_session__wait(struct daemon_session *session, struct daemon *d
 
 		if (start + secs < time(NULL))
 			return -1;
-	} while (session->pid != -1);
+	} while (wpid != pid);
 
 	return 0;
 }
@@ -908,9 +902,7 @@ static void daemon_session__kill(struct daemon_session *session,
 			daemon_session__signal(session, SIGKILL);
 			break;
 		default:
-			pr_err("failed to wait for session %s\n",
-			       session->name);
-			return;
+			break;
 		}
 		how++;
 
@@ -963,8 +955,7 @@ static void daemon__kill(struct daemon *daemon)
 			daemon__signal(daemon, SIGKILL);
 			break;
 		default:
-			pr_err("failed to wait for sessions\n");
-			return;
+			break;
 		}
 		how++;
 
@@ -1353,7 +1344,7 @@ out:
 		close(sock_fd);
 	if (conf_fd != -1)
 		close(conf_fd);
-	if (signal_fd != -1)
+	if (conf_fd != -1)
 		close(signal_fd);
 
 	pr_info("daemon exited\n");
