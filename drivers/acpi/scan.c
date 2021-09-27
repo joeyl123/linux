@@ -479,8 +479,9 @@ static void acpi_device_del(struct acpi_device *device)
 	list_for_each_entry(acpi_device_bus_id, &acpi_bus_id_list, node)
 		if (!strcmp(acpi_device_bus_id->bus_id,
 			    acpi_device_hid(device))) {
-			ida_simple_remove(&acpi_device_bus_id->instance_ida, device->pnp.instance_no);
-			if (ida_is_empty(&acpi_device_bus_id->instance_ida)) {
+			if (acpi_device_bus_id->instance_no > 0)
+				acpi_device_bus_id->instance_no--;
+			else {
 				list_del(&acpi_device_bus_id->node);
 				kfree_const(acpi_device_bus_id->bus_id);
 				kfree(acpi_device_bus_id);
@@ -630,21 +631,6 @@ static struct acpi_device_bus_id *acpi_device_bus_id_match(const char *dev_id)
 	return NULL;
 }
 
-static int acpi_device_set_name(struct acpi_device *device,
-				struct acpi_device_bus_id *acpi_device_bus_id)
-{
-	struct ida *instance_ida = &acpi_device_bus_id->instance_ida;
-	int result;
-
-	result = ida_simple_get(instance_ida, 0, ACPI_MAX_DEVICE_INSTANCES, GFP_KERNEL);
-	if (result < 0)
-		return result;
-
-	device->pnp.instance_no = result;
-	dev_set_name(&device->dev, "%s:%02x", acpi_device_bus_id->bus_id, result);
-	return 0;
-}
-
 int acpi_device_add(struct acpi_device *device,
 		    void (*release)(struct device *))
 {
@@ -679,9 +665,7 @@ int acpi_device_add(struct acpi_device *device,
 
 	acpi_device_bus_id = acpi_device_bus_id_match(acpi_device_hid(device));
 	if (acpi_device_bus_id) {
-		result = acpi_device_set_name(device, acpi_device_bus_id);
-		if (result)
-			goto err_unlock;
+		acpi_device_bus_id->instance_no++;
 	} else {
 		acpi_device_bus_id = kzalloc(sizeof(*acpi_device_bus_id),
 					     GFP_KERNEL);
@@ -697,16 +681,9 @@ int acpi_device_add(struct acpi_device *device,
 			goto err_unlock;
 		}
 
-		ida_init(&acpi_device_bus_id->instance_ida);
-
-		result = acpi_device_set_name(device, acpi_device_bus_id);
-		if (result) {
-			kfree(acpi_device_bus_id);
-			goto err_unlock;
-		}
-
 		list_add_tail(&acpi_device_bus_id->node, &acpi_bus_id_list);
 	}
+	dev_set_name(&device->dev, "%s:%02x", acpi_device_bus_id->bus_id, acpi_device_bus_id->instance_no);
 
 	if (device->parent)
 		list_add_tail(&device->node, &device->parent->children);
@@ -1670,8 +1647,6 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	device_initialize(&device->dev);
 	dev_set_uevent_suppress(&device->dev, true);
 	acpi_init_coherency(device);
-	/* Assume there are unmet deps to start with. */
-	device->dep_unmet = 1;
 }
 
 void acpi_device_add_finalize(struct acpi_device *device)
@@ -1935,8 +1910,6 @@ static void acpi_scan_dep_init(struct acpi_device *adev)
 {
 	struct acpi_dep_data *dep;
 
-	adev->dep_unmet = 0;
-
 	mutex_lock(&acpi_dep_list_lock);
 
 	list_for_each_entry(dep, &acpi_dep_list, node) {
@@ -1984,13 +1957,7 @@ static acpi_status acpi_bus_check_add(acpi_handle handle, bool check_dep,
 		return AE_CTRL_DEPTH;
 
 	acpi_scan_init_hotplug(device);
-	/*
-	 * If check_dep is true at this point, the device has no dependencies,
-	 * or the creation of the device object would have been postponed above.
-	 */
-	if (check_dep)
-		device->dep_unmet = 0;
-	else
+	if (!check_dep)
 		acpi_scan_dep_init(device);
 
 out:

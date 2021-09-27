@@ -551,8 +551,7 @@ esw_setup_dests(struct mlx5_flow_destination *dest,
 
 	if (!mlx5_eswitch_termtbl_required(esw, attr, flow_act, spec) &&
 	    MLX5_CAP_GEN(esw_attr->in_mdev, reg_c_preserve) &&
-	    mlx5_eswitch_vport_match_metadata_enabled(esw) &&
-	    MLX5_CAP_ESW_FLOWTABLE_FDB(esw->dev, ignore_flow_level))
+	    mlx5_eswitch_vport_match_metadata_enabled(esw))
 		attr->flags |= MLX5_ESW_ATTR_FLAG_SRC_REWRITE;
 
 	if (attr->dest_ft) {

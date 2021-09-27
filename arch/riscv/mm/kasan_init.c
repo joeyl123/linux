@@ -155,7 +155,7 @@ static void __init kasan_populate(void *start, void *end)
 	memset(start, KASAN_SHADOW_INIT, end - start);
 }
 
-static void __init kasan_shallow_populate(void *start, void *end)
+void __init kasan_shallow_populate(void *start, void *end)
 {
 	unsigned long vaddr = (unsigned long)start & PAGE_MASK;
 	unsigned long vend = PAGE_ALIGN((unsigned long)end);
@@ -187,8 +187,6 @@ static void __init kasan_shallow_populate(void *start, void *end)
 		}
 		vaddr += PAGE_SIZE;
 	}
-
-	local_flush_tlb_all();
 }
 
 void __init kasan_init(void)

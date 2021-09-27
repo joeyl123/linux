@@ -317,9 +317,9 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 	}
 
 	base = ioremap(res->start, resource_size(res));
-	if (!base) {
+	if (IS_ERR(base)) {
 		dev_err(dev, "failed to map resource %pR\n", res);
-		ret = -ENOMEM;
+		ret = PTR_ERR(base);
 		goto release_region;
 	}
 
@@ -374,7 +374,7 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 error:
 	kfree(data);
 unmap_base:
-	iounmap(base);
+	iounmap(data->base);
 release_region:
 	release_mem_region(res->start, resource_size(res));
 	return ret;

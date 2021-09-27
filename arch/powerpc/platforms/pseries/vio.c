@@ -1261,6 +1261,7 @@ static int vio_bus_remove(struct device *dev)
 	struct vio_dev *viodev = to_vio_dev(dev);
 	struct vio_driver *viodrv = to_vio_driver(dev->driver);
 	struct device *devptr;
+	int ret = 1;
 
 	/*
 	 * Hold a reference to the device after the remove function is called
@@ -1269,13 +1270,13 @@ static int vio_bus_remove(struct device *dev)
 	devptr = get_device(dev);
 
 	if (viodrv->remove)
-		viodrv->remove(viodev);
+		ret = viodrv->remove(viodev);
 
-	if (firmware_has_feature(FW_FEATURE_CMO))
+	if (!ret && firmware_has_feature(FW_FEATURE_CMO))
 		vio_cmo_bus_remove(viodev);
 
 	put_device(devptr);
-	return 0;
+	return ret;
 }
 
 /**

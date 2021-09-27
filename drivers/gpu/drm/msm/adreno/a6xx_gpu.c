@@ -522,73 +522,28 @@ static int a6xx_cp_init(struct msm_gpu *gpu)
 	return a6xx_idle(gpu, ring) ? 0 : -EINVAL;
 }
 
-/*
- * Check that the microcode version is new enough to include several key
- * security fixes. Return true if the ucode is safe.
- */
-static bool a6xx_ucode_check_version(struct a6xx_gpu *a6xx_gpu,
+static void a6xx_ucode_check_version(struct a6xx_gpu *a6xx_gpu,
 		struct drm_gem_object *obj)
 {
-	struct adreno_gpu *adreno_gpu = &a6xx_gpu->base;
-	struct msm_gpu *gpu = &adreno_gpu->base;
 	u32 *buf = msm_gem_get_vaddr(obj);
-	bool ret = false;
 
 	if (IS_ERR(buf))
-		return false;
+		return;
 
 	/*
-	 * Targets up to a640 (a618, a630 and a640) need to check for a
-	 * microcode version that is patched to support the whereami opcode or
-	 * one that is new enough to include it by default.
+	 * If the lowest nibble is 0xa that is an indication that this microcode
+	 * has been patched. The actual version is in dword [3] but we only care
+	 * about the patchlevel which is the lowest nibble of dword [3]
+	 *
+	 * Otherwise check that the firmware is greater than or equal to 1.90
+	 * which was the first version that had this fix built in
 	 */
-	if (adreno_is_a618(adreno_gpu) || adreno_is_a630(adreno_gpu) ||
-		adreno_is_a640(adreno_gpu)) {
-		/*
-		 * If the lowest nibble is 0xa that is an indication that this
-		 * microcode has been patched. The actual version is in dword
-		 * [3] but we only care about the patchlevel which is the lowest
-		 * nibble of dword [3]
-		 *
-		 * Otherwise check that the firmware is greater than or equal
-		 * to 1.90 which was the first version that had this fix built
-		 * in
-		 */
-		if ((((buf[0] & 0xf) == 0xa) && (buf[2] & 0xf) >= 1) ||
-			(buf[0] & 0xfff) >= 0x190) {
-			a6xx_gpu->has_whereami = true;
-			ret = true;
-			goto out;
-		}
+	if (((buf[0] & 0xf) == 0xa) && (buf[2] & 0xf) >= 1)
+		a6xx_gpu->has_whereami = true;
+	else if ((buf[0] & 0xfff) > 0x190)
+		a6xx_gpu->has_whereami = true;
 
-		DRM_DEV_ERROR(&gpu->pdev->dev,
-			"a630 SQE ucode is too old. Have version %x need at least %x\n",
-			buf[0] & 0xfff, 0x190);
-	}  else {
-		/*
-		 * a650 tier targets don't need whereami but still need to be
-		 * equal to or newer than 1.95 for other security fixes
-		 */
-		if (adreno_is_a650(adreno_gpu)) {
-			if ((buf[0] & 0xfff) >= 0x195) {
-				ret = true;
-				goto out;
-			}
-
-			DRM_DEV_ERROR(&gpu->pdev->dev,
-				"a650 SQE ucode is too old. Have version %x need at least %x\n",
-				buf[0] & 0xfff, 0x195);
-		}
-
-		/*
-		 * When a660 is added those targets should return true here
-		 * since those have all the critical security fixes built in
-		 * from the start
-		 */
-	}
-out:
 	msm_gem_put_vaddr(obj);
-	return ret;
 }
 
 static int a6xx_ucode_init(struct msm_gpu *gpu)
@@ -611,13 +566,7 @@ static int a6xx_ucode_init(struct msm_gpu *gpu)
 		}
 
 		msm_gem_object_set_name(a6xx_gpu->sqe_bo, "sqefw");
-		if (!a6xx_ucode_check_version(a6xx_gpu, a6xx_gpu->sqe_bo)) {
-			msm_gem_unpin_iova(a6xx_gpu->sqe_bo, gpu->aspace);
-			drm_gem_object_put(a6xx_gpu->sqe_bo);
-
-			a6xx_gpu->sqe_bo = NULL;
-			return -EPERM;
-		}
+		a6xx_ucode_check_version(a6xx_gpu, a6xx_gpu->sqe_bo);
 	}
 
 	gpu_write64(gpu, REG_A6XX_CP_SQE_INSTR_BASE_LO,
@@ -1401,20 +1350,35 @@ static int a6xx_set_supported_hw(struct device *dev, struct a6xx_gpu *a6xx_gpu,
 		u32 revn)
 {
 	struct opp_table *opp_table;
+	struct nvmem_cell *cell;
 	u32 supp_hw = UINT_MAX;
-	u16 speedbin;
-	int ret;
+	void *buf;
 
-	ret = nvmem_cell_read_u16(dev, "speed_bin", &speedbin);
-	if (ret) {
+	cell = nvmem_cell_get(dev, "speed_bin");
+	/*
+	 * -ENOENT means that the platform doesn't support speedbin which is
+	 * fine
+	 */
+	if (PTR_ERR(cell) == -ENOENT)
+		return 0;
+	else if (IS_ERR(cell)) {
 		DRM_DEV_ERROR(dev,
-			      "failed to read speed-bin (%d). Some OPPs may not be supported by hardware",
-			      ret);
+				"failed to read speed-bin. Some OPPs may not be supported by hardware");
 		goto done;
 	}
-	speedbin = le16_to_cpu(speedbin);
 
-	supp_hw = fuse_to_supp_hw(dev, revn, speedbin);
+	buf = nvmem_cell_read(cell, NULL);
+	if (IS_ERR(buf)) {
+		nvmem_cell_put(cell);
+		DRM_DEV_ERROR(dev,
+				"failed to read speed-bin. Some OPPs may not be supported by hardware");
+		goto done;
+	}
+
+	supp_hw = fuse_to_supp_hw(dev, revn, *((u32 *) buf));
+
+	kfree(buf);
+	nvmem_cell_put(cell);
 
 done:
 	opp_table = dev_pm_opp_set_supported_hw(dev, &supp_hw, 1);

@@ -1061,7 +1061,9 @@ static inline void memcg_memory_event_mm(struct mm_struct *mm,
 	rcu_read_unlock();
 }
 
-void split_page_memcg(struct page *head, unsigned int nr);
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+void mem_cgroup_split_huge_fixup(struct page *head);
+#endif
 
 #else /* CONFIG_MEMCG */
 
@@ -1398,7 +1400,7 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 	return 0;
 }
 
-static inline void split_page_memcg(struct page *head, unsigned int nr)
+static inline void mem_cgroup_split_huge_fixup(struct page *head)
 {
 }
 

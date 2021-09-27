@@ -69,6 +69,7 @@ static void vdpa_release_dev(struct device *d)
  * initialized but before registered.
  * @parent: the parent device
  * @config: the bus operations that is supported by this device
+ * @nvqs: number of virtqueues supported by this device
  * @size: size of the parent structure that contains private data
  * @name: name of the vdpa device; optional.
  *
@@ -80,7 +81,7 @@ static void vdpa_release_dev(struct device *d)
  */
 struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 					const struct vdpa_config_ops *config,
-					size_t size, const char *name)
+					int nvqs, size_t size, const char *name)
 {
 	struct vdpa_device *vdev;
 	int err = -EINVAL;
@@ -106,6 +107,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	vdev->index = err;
 	vdev->config = config;
 	vdev->features_valid = false;
+	vdev->nvqs = nvqs;
 
 	if (name)
 		err = dev_set_name(&vdev->dev, "%s", name);
@@ -134,11 +136,9 @@ static int vdpa_name_match(struct device *dev, const void *data)
 	return (strcmp(dev_name(&vdev->dev), data) == 0);
 }
 
-static int __vdpa_register_device(struct vdpa_device *vdev, int nvqs)
+static int __vdpa_register_device(struct vdpa_device *vdev)
 {
 	struct device *dev;
-
-	vdev->nvqs = nvqs;
 
 	lockdep_assert_held(&vdpa_dev_mutex);
 	dev = bus_find_device(&vdpa_bus, NULL, dev_name(&vdev->dev), vdpa_name_match);
@@ -155,16 +155,15 @@ static int __vdpa_register_device(struct vdpa_device *vdev, int nvqs)
  * Caller must invoke this routine in the management device dev_add()
  * callback after setting up valid mgmtdev for this vdpa device.
  * @vdev: the vdpa device to be registered to vDPA bus
- * @nvqs: number of virtqueues supported by this device
  *
  * Returns an error when fail to add device to vDPA bus
  */
-int _vdpa_register_device(struct vdpa_device *vdev, int nvqs)
+int _vdpa_register_device(struct vdpa_device *vdev)
 {
 	if (!vdev->mdev)
 		return -EINVAL;
 
-	return __vdpa_register_device(vdev, nvqs);
+	return __vdpa_register_device(vdev);
 }
 EXPORT_SYMBOL_GPL(_vdpa_register_device);
 
@@ -172,16 +171,15 @@ EXPORT_SYMBOL_GPL(_vdpa_register_device);
  * vdpa_register_device - register a vDPA device
  * Callers must have a succeed call of vdpa_alloc_device() before.
  * @vdev: the vdpa device to be registered to vDPA bus
- * @nvqs: number of virtqueues supported by this device
  *
  * Returns an error when fail to add to vDPA bus
  */
-int vdpa_register_device(struct vdpa_device *vdev, int nvqs)
+int vdpa_register_device(struct vdpa_device *vdev)
 {
 	int err;
 
 	mutex_lock(&vdpa_dev_mutex);
-	err = __vdpa_register_device(vdev, nvqs);
+	err = __vdpa_register_device(vdev);
 	mutex_unlock(&vdpa_dev_mutex);
 	return err;
 }

@@ -368,13 +368,11 @@ void zero_user_segments(struct page *page, unsigned start1, unsigned end1,
 
 	BUG_ON(end1 > page_size(page) || end2 > page_size(page));
 
-	if (start1 >= end1)
-		start1 = end1 = 0;
-	if (start2 >= end2)
-		start2 = end2 = 0;
-
 	for (i = 0; i < compound_nr(page); i++) {
 		void *kaddr = NULL;
+
+		if (start1 < PAGE_SIZE || start2 < PAGE_SIZE)
+			kaddr = kmap_atomic(page + i);
 
 		if (start1 >= PAGE_SIZE) {
 			start1 -= PAGE_SIZE;
@@ -382,10 +380,8 @@ void zero_user_segments(struct page *page, unsigned start1, unsigned end1,
 		} else {
 			unsigned this_end = min_t(unsigned, end1, PAGE_SIZE);
 
-			if (end1 > start1) {
-				kaddr = kmap_atomic(page + i);
+			if (end1 > start1)
 				memset(kaddr + start1, 0, this_end - start1);
-			}
 			end1 -= this_end;
 			start1 = 0;
 		}
@@ -396,11 +392,8 @@ void zero_user_segments(struct page *page, unsigned start1, unsigned end1,
 		} else {
 			unsigned this_end = min_t(unsigned, end2, PAGE_SIZE);
 
-			if (end2 > start2) {
-				if (!kaddr)
-					kaddr = kmap_atomic(page + i);
+			if (end2 > start2)
 				memset(kaddr + start2, 0, this_end - start2);
-			}
 			end2 -= this_end;
 			start2 = 0;
 		}
@@ -618,7 +611,7 @@ void __kmap_local_sched_out(void)
 		int idx;
 
 		/* With debug all even slots are unmapped and act as guard */
-		if (IS_ENABLED(CONFIG_DEBUG_KMAP_LOCAL) && !(i & 0x01)) {
+		if (IS_ENABLED(CONFIG_DEBUG_HIGHMEM) && !(i & 0x01)) {
 			WARN_ON_ONCE(!pte_none(pteval));
 			continue;
 		}
@@ -654,7 +647,7 @@ void __kmap_local_sched_in(void)
 		int idx;
 
 		/* With debug all even slots are unmapped and act as guard */
-		if (IS_ENABLED(CONFIG_DEBUG_KMAP_LOCAL) && !(i & 0x01)) {
+		if (IS_ENABLED(CONFIG_DEBUG_HIGHMEM) && !(i & 0x01)) {
 			WARN_ON_ONCE(!pte_none(pteval));
 			continue;
 		}

@@ -67,17 +67,6 @@
 #include "policycap_names.h"
 #include "ima.h"
 
-struct convert_context_args {
-	struct selinux_state *state;
-	struct policydb *oldp;
-	struct policydb *newp;
-};
-
-struct selinux_policy_convert_data {
-	struct convert_context_args args;
-	struct sidtab_convert_params sidtab_params;
-};
-
 /* Forward declaration. */
 static int context_struct_to_string(struct policydb *policydb,
 				    struct context *context,
@@ -1985,6 +1974,12 @@ static inline int convert_context_handle_invalid_context(
 	return 0;
 }
 
+struct convert_context_args {
+	struct selinux_state *state;
+	struct policydb *oldp;
+	struct policydb *newp;
+};
+
 /*
  * Convert the values in the security context
  * structure `oldc' from the values specified
@@ -2164,7 +2159,7 @@ static void selinux_policy_cond_free(struct selinux_policy *policy)
 }
 
 void selinux_policy_cancel(struct selinux_state *state,
-			   struct selinux_load_state *load_state)
+			struct selinux_policy *policy)
 {
 	struct selinux_policy *oldpolicy;
 
@@ -2172,8 +2167,7 @@ void selinux_policy_cancel(struct selinux_state *state,
 					lockdep_is_held(&state->policy_mutex));
 
 	sidtab_cancel_convert(oldpolicy->sidtab);
-	selinux_policy_free(load_state->policy);
-	kfree(load_state->convert_data);
+	selinux_policy_free(policy);
 }
 
 static void selinux_notify_policy_change(struct selinux_state *state,
@@ -2189,9 +2183,9 @@ static void selinux_notify_policy_change(struct selinux_state *state,
 }
 
 void selinux_policy_commit(struct selinux_state *state,
-			   struct selinux_load_state *load_state)
+			struct selinux_policy *newpolicy)
 {
-	struct selinux_policy *oldpolicy, *newpolicy = load_state->policy;
+	struct selinux_policy *oldpolicy;
 	u32 seqno;
 
 	oldpolicy = rcu_dereference_protected(state->policy,
@@ -2231,7 +2225,6 @@ void selinux_policy_commit(struct selinux_state *state,
 	/* Free the old policy */
 	synchronize_rcu();
 	selinux_policy_free(oldpolicy);
-	kfree(load_state->convert_data);
 
 	/* Notify others of the policy change */
 	selinux_notify_policy_change(state, seqno);
@@ -2248,10 +2241,11 @@ void selinux_policy_commit(struct selinux_state *state,
  * loading the new policy.
  */
 int security_load_policy(struct selinux_state *state, void *data, size_t len,
-			 struct selinux_load_state *load_state)
+			struct selinux_policy **newpolicyp)
 {
 	struct selinux_policy *newpolicy, *oldpolicy;
-	struct selinux_policy_convert_data *convert_data;
+	struct sidtab_convert_params convert_params;
+	struct convert_context_args args;
 	int rc = 0;
 	struct policy_file file = { data, len }, *fp = &file;
 
@@ -2281,10 +2275,10 @@ int security_load_policy(struct selinux_state *state, void *data, size_t len,
 		goto err_mapping;
 	}
 
+
 	if (!selinux_initialized(state)) {
 		/* First policy load, so no need to preserve state from old policy */
-		load_state->policy = newpolicy;
-		load_state->convert_data = NULL;
+		*newpolicyp = newpolicy;
 		return 0;
 	}
 
@@ -2298,38 +2292,29 @@ int security_load_policy(struct selinux_state *state, void *data, size_t len,
 		goto err_free_isids;
 	}
 
-	convert_data = kmalloc(sizeof(*convert_data), GFP_KERNEL);
-	if (!convert_data) {
-		rc = -ENOMEM;
-		goto err_free_isids;
-	}
-
 	/*
 	 * Convert the internal representations of contexts
 	 * in the new SID table.
 	 */
-	convert_data->args.state = state;
-	convert_data->args.oldp = &oldpolicy->policydb;
-	convert_data->args.newp = &newpolicy->policydb;
+	args.state = state;
+	args.oldp = &oldpolicy->policydb;
+	args.newp = &newpolicy->policydb;
 
-	convert_data->sidtab_params.func = convert_context;
-	convert_data->sidtab_params.args = &convert_data->args;
-	convert_data->sidtab_params.target = newpolicy->sidtab;
+	convert_params.func = convert_context;
+	convert_params.args = &args;
+	convert_params.target = newpolicy->sidtab;
 
-	rc = sidtab_convert(oldpolicy->sidtab, &convert_data->sidtab_params);
+	rc = sidtab_convert(oldpolicy->sidtab, &convert_params);
 	if (rc) {
 		pr_err("SELinux:  unable to convert the internal"
 			" representation of contexts in the new SID"
 			" table\n");
-		goto err_free_convert_data;
+		goto err_free_isids;
 	}
 
-	load_state->policy = newpolicy;
-	load_state->convert_data = convert_data;
+	*newpolicyp = newpolicy;
 	return 0;
 
-err_free_convert_data:
-	kfree(convert_data);
 err_free_isids:
 	sidtab_destroy(newpolicy->sidtab);
 err_mapping:

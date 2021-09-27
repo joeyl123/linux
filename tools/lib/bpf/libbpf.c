@@ -1181,8 +1181,7 @@ static int bpf_object__elf_init(struct bpf_object *obj)
 	if (!elf_rawdata(elf_getscn(obj->efile.elf, obj->efile.shstrndx), NULL)) {
 		pr_warn("elf: failed to get section names strings from %s: %s\n",
 			obj->path, elf_errmsg(-1));
-		err = -LIBBPF_ERRNO__FORMAT;
-		goto errout;
+		return -LIBBPF_ERRNO__FORMAT;
 	}
 
 	/* Old LLVM set e_machine to EM_NONE */

@@ -230,6 +230,7 @@ static struct phy_driver genphy_driver;
 static LIST_HEAD(phy_fixup_list);
 static DEFINE_MUTEX(phy_fixup_lock);
 
+#ifdef CONFIG_PM
 static bool mdio_bus_phy_may_suspend(struct phy_device *phydev)
 {
 	struct device_driver *drv = phydev->mdio.dev.driver;
@@ -269,7 +270,7 @@ out:
 	return !phydev->suspended;
 }
 
-static __maybe_unused int mdio_bus_phy_suspend(struct device *dev)
+static int mdio_bus_phy_suspend(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
 
@@ -289,7 +290,7 @@ static __maybe_unused int mdio_bus_phy_suspend(struct device *dev)
 	return phy_suspend(phydev);
 }
 
-static __maybe_unused int mdio_bus_phy_resume(struct device *dev)
+static int mdio_bus_phy_resume(struct device *dev)
 {
 	struct phy_device *phydev = to_phy_device(dev);
 	int ret;
@@ -315,6 +316,7 @@ no_resume:
 
 static SIMPLE_DEV_PM_OPS(mdio_bus_phy_pm_ops, mdio_bus_phy_suspend,
 			 mdio_bus_phy_resume);
+#endif /* CONFIG_PM */
 
 /**
  * phy_register_fixup - creates a new phy_fixup and adds it to the list

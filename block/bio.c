@@ -33,7 +33,7 @@ static struct biovec_slab {
 	{ .nr_vecs = 16, .name = "biovec-16" },
 	{ .nr_vecs = 64, .name = "biovec-64" },
 	{ .nr_vecs = 128, .name = "biovec-128" },
-	{ .nr_vecs = BIO_MAX_VECS, .name = "biovec-max" },
+	{ .nr_vecs = BIO_MAX_PAGES, .name = "biovec-max" },
 };
 
 static struct biovec_slab *biovec_slab(unsigned short nr_vecs)
@@ -46,7 +46,7 @@ static struct biovec_slab *biovec_slab(unsigned short nr_vecs)
 		return &bvec_slabs[1];
 	case 65 ... 128:
 		return &bvec_slabs[2];
-	case 129 ... BIO_MAX_VECS:
+	case 129 ... BIO_MAX_PAGES:
 		return &bvec_slabs[3];
 	default:
 		BUG();
@@ -151,9 +151,9 @@ out:
 
 void bvec_free(mempool_t *pool, struct bio_vec *bv, unsigned short nr_vecs)
 {
-	BIO_BUG_ON(nr_vecs > BIO_MAX_VECS);
+	BIO_BUG_ON(nr_vecs > BIO_MAX_PAGES);
 
-	if (nr_vecs == BIO_MAX_VECS)
+	if (nr_vecs == BIO_MAX_PAGES)
 		mempool_free(bv, pool);
 	else if (nr_vecs > BIO_INLINE_VECS)
 		kmem_cache_free(biovec_slab(nr_vecs)->slab, bv);
@@ -186,15 +186,15 @@ struct bio_vec *bvec_alloc(mempool_t *pool, unsigned short *nr_vecs,
 	/*
 	 * Try a slab allocation first for all smaller allocations.  If that
 	 * fails and __GFP_DIRECT_RECLAIM is set retry with the mempool.
-	 * The mempool is sized to handle up to BIO_MAX_VECS entries.
+	 * The mempool is sized to handle up to BIO_MAX_PAGES entries.
 	 */
-	if (*nr_vecs < BIO_MAX_VECS) {
+	if (*nr_vecs < BIO_MAX_PAGES) {
 		struct bio_vec *bvl;
 
 		bvl = kmem_cache_alloc(bvs->slab, bvec_alloc_gfp(gfp_mask));
 		if (likely(bvl) || !(gfp_mask & __GFP_DIRECT_RECLAIM))
 			return bvl;
-		*nr_vecs = BIO_MAX_VECS;
+		*nr_vecs = BIO_MAX_PAGES;
 	}
 
 	return mempool_alloc(pool, gfp_mask);
@@ -949,7 +949,7 @@ void bio_release_pages(struct bio *bio, bool mark_dirty)
 }
 EXPORT_SYMBOL_GPL(bio_release_pages);
 
-static void __bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
+static int bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
 {
 	WARN_ON_ONCE(bio->bi_max_vecs);
 
@@ -959,23 +959,8 @@ static void __bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
 	bio->bi_iter.bi_size = iter->count;
 	bio_set_flag(bio, BIO_NO_PAGE_REF);
 	bio_set_flag(bio, BIO_CLONED);
-}
 
-static int bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
-{
-	__bio_iov_bvec_set(bio, iter);
 	iov_iter_advance(iter, iter->count);
-	return 0;
-}
-
-static int bio_iov_bvec_set_append(struct bio *bio, struct iov_iter *iter)
-{
-	struct request_queue *q = bio->bi_bdev->bd_disk->queue;
-	struct iov_iter i = *iter;
-
-	iov_iter_truncate(&i, queue_max_zone_append_sectors(q) << 9);
-	__bio_iov_bvec_set(bio, &i);
-	iov_iter_advance(iter, i.count);
 	return 0;
 }
 
@@ -1109,8 +1094,8 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	int ret = 0;
 
 	if (iov_iter_is_bvec(iter)) {
-		if (bio_op(bio) == REQ_OP_ZONE_APPEND)
-			return bio_iov_bvec_set_append(bio, iter);
+		if (WARN_ON_ONCE(bio_op(bio) == REQ_OP_ZONE_APPEND))
+			return -EINVAL;
 		return bio_iov_bvec_set(bio, iter);
 	}
 

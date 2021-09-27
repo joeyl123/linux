@@ -504,13 +504,6 @@ static bool is_ptr_cast_function(enum bpf_func_id func_id)
 		func_id == BPF_FUNC_skc_to_tcp_request_sock;
 }
 
-static bool is_cmpxchg_insn(const struct bpf_insn *insn)
-{
-	return BPF_CLASS(insn->code) == BPF_STX &&
-	       BPF_MODE(insn->code) == BPF_ATOMIC &&
-	       insn->imm == BPF_CMPXCHG;
-}
-
 /* string representation of 'enum bpf_reg_type' */
 static const char * const reg_type_str[] = {
 	[NOT_INIT]		= "?",
@@ -1127,7 +1120,7 @@ static void mark_ptr_not_null_reg(struct bpf_reg_state *reg)
 		reg->type = PTR_TO_RDWR_BUF;
 		break;
 	default:
-		WARN_ONCE(1, "unknown nullable register type");
+		WARN_ON("unknown nullable register type");
 	}
 }
 
@@ -1710,11 +1703,7 @@ static bool is_reg64(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	}
 
 	if (class == BPF_STX) {
-		/* BPF_STX (including atomic variants) has multiple source
-		 * operands, one of which is a ptr. Check whether the caller is
-		 * asking about it.
-		 */
-		if (t == SRC_OP && reg->type != SCALAR_VALUE)
+		if (reg->type != SCALAR_VALUE)
 			return true;
 		return BPF_SIZE(code) == BPF_DW;
 	}
@@ -1746,38 +1735,22 @@ static bool is_reg64(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	return true;
 }
 
-/* Return the regno defined by the insn, or -1. */
-static int insn_def_regno(const struct bpf_insn *insn)
+/* Return TRUE if INSN doesn't have explicit value define. */
+static bool insn_no_def(struct bpf_insn *insn)
 {
-	switch (BPF_CLASS(insn->code)) {
-	case BPF_JMP:
-	case BPF_JMP32:
-	case BPF_ST:
-		return -1;
-	case BPF_STX:
-		if (BPF_MODE(insn->code) == BPF_ATOMIC &&
-		    (insn->imm & BPF_FETCH)) {
-			if (insn->imm == BPF_CMPXCHG)
-				return BPF_REG_0;
-			else
-				return insn->src_reg;
-		} else {
-			return -1;
-		}
-	default:
-		return insn->dst_reg;
-	}
+	u8 class = BPF_CLASS(insn->code);
+
+	return (class == BPF_JMP || class == BPF_JMP32 ||
+		class == BPF_STX || class == BPF_ST);
 }
 
 /* Return TRUE if INSN has defined any 32-bit value explicitly. */
 static bool insn_has_def32(struct bpf_verifier_env *env, struct bpf_insn *insn)
 {
-	int dst_reg = insn_def_regno(insn);
-
-	if (dst_reg == -1)
+	if (insn_no_def(insn))
 		return false;
 
-	return !is_reg64(env, insn, dst_reg, NULL, DST_OP);
+	return !is_reg64(env, insn, insn->dst_reg, NULL, DST_OP);
 }
 
 static void mark_insn_zext(struct bpf_verifier_env *env,
@@ -5861,14 +5834,10 @@ static int retrieve_ptr_limit(const struct bpf_reg_state *ptr_reg,
 {
 	bool mask_to_left = (opcode == BPF_ADD &&  off_is_neg) ||
 			    (opcode == BPF_SUB && !off_is_neg);
-	u32 off, max;
+	u32 off;
 
 	switch (ptr_reg->type) {
 	case PTR_TO_STACK:
-		/* Offset 0 is out-of-bounds, but acceptable start for the
-		 * left direction, see BPF_REG_FP.
-		 */
-		max = MAX_BPF_STACK + mask_to_left;
 		/* Indirect variable offset stack access is prohibited in
 		 * unprivileged mode so it's not handled here.
 		 */
@@ -5876,17 +5845,16 @@ static int retrieve_ptr_limit(const struct bpf_reg_state *ptr_reg,
 		if (mask_to_left)
 			*ptr_limit = MAX_BPF_STACK + off;
 		else
-			*ptr_limit = -off - 1;
-		return *ptr_limit >= max ? -ERANGE : 0;
+			*ptr_limit = -off;
+		return 0;
 	case PTR_TO_MAP_VALUE:
-		max = ptr_reg->map_ptr->value_size;
 		if (mask_to_left) {
 			*ptr_limit = ptr_reg->umax_value + ptr_reg->off;
 		} else {
 			off = ptr_reg->smin_value + ptr_reg->off;
-			*ptr_limit = ptr_reg->map_ptr->value_size - off - 1;
+			*ptr_limit = ptr_reg->map_ptr->value_size - off;
 		}
-		return *ptr_limit >= max ? -ERANGE : 0;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -5939,7 +5907,6 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
 	u32 alu_state, alu_limit;
 	struct bpf_reg_state tmp;
 	bool ret;
-	int err;
 
 	if (can_skip_alu_sanitation(env, insn))
 		return 0;
@@ -5955,13 +5922,10 @@ static int sanitize_ptr_alu(struct bpf_verifier_env *env,
 	alu_state |= ptr_is_dst_reg ?
 		     BPF_ALU_SANITIZE_SRC : BPF_ALU_SANITIZE_DST;
 
-	err = retrieve_ptr_limit(ptr_reg, &alu_limit, opcode, off_is_neg);
-	if (err < 0)
-		return err;
-
-	err = update_alu_sanitation_state(aux, alu_state, alu_limit);
-	if (err < 0)
-		return err;
+	if (retrieve_ptr_limit(ptr_reg, &alu_limit, opcode, off_is_neg))
+		return 0;
+	if (update_alu_sanitation_state(aux, alu_state, alu_limit))
+		return -EACCES;
 do_sim:
 	/* Simulate and find potential out-of-bounds access under
 	 * speculative execution from truncation as a result of
@@ -6112,7 +6076,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	case BPF_ADD:
 		ret = sanitize_ptr_alu(env, insn, ptr_reg, dst_reg, smin_val < 0);
 		if (ret < 0) {
-			verbose(env, "R%d tried to add from different maps, paths, or prohibited types\n", dst);
+			verbose(env, "R%d tried to add from different maps or paths\n", dst);
 			return ret;
 		}
 		/* We can take a fixed offset as long as it doesn't overflow
@@ -6167,7 +6131,7 @@ static int adjust_ptr_min_max_vals(struct bpf_verifier_env *env,
 	case BPF_SUB:
 		ret = sanitize_ptr_alu(env, insn, ptr_reg, dst_reg, smin_val < 0);
 		if (ret < 0) {
-			verbose(env, "R%d tried to sub from different maps, paths, or prohibited types\n", dst);
+			verbose(env, "R%d tried to sub from different maps or paths\n", dst);
 			return ret;
 		}
 		if (dst_reg == off_reg) {
@@ -9065,10 +9029,6 @@ static int check_btf_info(struct bpf_verifier_env *env,
 	btf = btf_get_by_fd(attr->prog_btf_fd);
 	if (IS_ERR(btf))
 		return PTR_ERR(btf);
-	if (btf_is_kernel(btf)) {
-		btf_put(btf);
-		return -EACCES;
-	}
 	env->prog->aux->btf = btf;
 
 	err = check_btf_func(env, attr, uattr);
@@ -11046,10 +11006,9 @@ static int opt_subreg_zext_lo32_rnd_hi32(struct bpf_verifier_env *env,
 	for (i = 0; i < len; i++) {
 		int adj_idx = i + delta;
 		struct bpf_insn insn;
-		int load_reg;
+		u8 load_reg;
 
 		insn = insns[adj_idx];
-		load_reg = insn_def_regno(&insn);
 		if (!aux[adj_idx].zext_dst) {
 			u8 code, class;
 			u32 imm_rnd;
@@ -11059,14 +11018,14 @@ static int opt_subreg_zext_lo32_rnd_hi32(struct bpf_verifier_env *env,
 
 			code = insn.code;
 			class = BPF_CLASS(code);
-			if (load_reg == -1)
+			if (insn_no_def(&insn))
 				continue;
 
 			/* NOTE: arg "reg" (the fourth one) is only used for
-			 *       BPF_STX + SRC_OP, so it is safe to pass NULL
-			 *       here.
+			 *       BPF_STX which has been ruled out in above
+			 *       check, it is safe to pass NULL here.
 			 */
-			if (is_reg64(env, &insn, load_reg, NULL, DST_OP)) {
+			if (is_reg64(env, &insn, insn.dst_reg, NULL, DST_OP)) {
 				if (class == BPF_LD &&
 				    BPF_MODE(code) == BPF_IMM)
 					i++;
@@ -11081,28 +11040,31 @@ static int opt_subreg_zext_lo32_rnd_hi32(struct bpf_verifier_env *env,
 			imm_rnd = get_random_int();
 			rnd_hi32_patch[0] = insn;
 			rnd_hi32_patch[1].imm = imm_rnd;
-			rnd_hi32_patch[3].dst_reg = load_reg;
+			rnd_hi32_patch[3].dst_reg = insn.dst_reg;
 			patch = rnd_hi32_patch;
 			patch_len = 4;
 			goto apply_patch_buffer;
 		}
 
-		/* Add in an zero-extend instruction if a) the JIT has requested
-		 * it or b) it's a CMPXCHG.
-		 *
-		 * The latter is because: BPF_CMPXCHG always loads a value into
-		 * R0, therefore always zero-extends. However some archs'
-		 * equivalent instruction only does this load when the
-		 * comparison is successful. This detail of CMPXCHG is
-		 * orthogonal to the general zero-extension behaviour of the
-		 * CPU, so it's treated independently of bpf_jit_needs_zext.
-		 */
-		if (!bpf_jit_needs_zext() && !is_cmpxchg_insn(&insn))
+		if (!bpf_jit_needs_zext())
 			continue;
 
-		if (WARN_ON(load_reg == -1)) {
-			verbose(env, "verifier bug. zext_dst is set, but no reg is defined\n");
-			return -EFAULT;
+		/* zext_dst means that we want to zero-extend whatever register
+		 * the insn defines, which is dst_reg most of the time, with
+		 * the notable exception of BPF_STX + BPF_ATOMIC + BPF_FETCH.
+		 */
+		if (BPF_CLASS(insn.code) == BPF_STX &&
+		    BPF_MODE(insn.code) == BPF_ATOMIC) {
+			/* BPF_STX + BPF_ATOMIC insns without BPF_FETCH do not
+			 * define any registers, therefore zext_dst cannot be
+			 * set.
+			 */
+			if (WARN_ON(!(insn.imm & BPF_FETCH)))
+				return -EINVAL;
+			load_reg = insn.imm == BPF_CMPXCHG ? BPF_REG_0
+							   : insn.src_reg;
+		} else {
+			load_reg = insn.dst_reg;
 		}
 
 		zext_patch[0] = insn;
@@ -11673,7 +11635,7 @@ static int fixup_bpf_calls(struct bpf_verifier_env *env)
 			off_reg = issrc ? insn->src_reg : insn->dst_reg;
 			if (isneg)
 				*patch++ = BPF_ALU64_IMM(BPF_MUL, off_reg, -1);
-			*patch++ = BPF_MOV32_IMM(BPF_REG_AX, aux->alu_limit);
+			*patch++ = BPF_MOV32_IMM(BPF_REG_AX, aux->alu_limit - 1);
 			*patch++ = BPF_ALU64_REG(BPF_SUB, BPF_REG_AX, off_reg);
 			*patch++ = BPF_ALU64_REG(BPF_OR, BPF_REG_AX, off_reg);
 			*patch++ = BPF_ALU64_IMM(BPF_NEG, BPF_REG_AX, 0);

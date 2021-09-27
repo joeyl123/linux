@@ -1169,14 +1169,14 @@ int nfs4_call_sync(struct rpc_clnt *clnt,
 static void
 nfs4_inc_nlink_locked(struct inode *inode)
 {
-	nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
+	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_OTHER;
 	inc_nlink(inode);
 }
 
 static void
 nfs4_dec_nlink_locked(struct inode *inode)
 {
-	nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
+	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_OTHER;
 	drop_nlink(inode);
 }
 
@@ -1187,31 +1187,35 @@ nfs4_update_changeattr_locked(struct inode *inode,
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 
-	cache_validity |= NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME;
+	nfsi->cache_validity |= NFS_INO_INVALID_CTIME
+		| NFS_INO_INVALID_MTIME
+		| cache_validity;
 
 	if (cinfo->atomic && cinfo->before == inode_peek_iversion_raw(inode)) {
 		nfsi->cache_validity &= ~NFS_INO_REVAL_PAGECACHE;
 		nfsi->attrtimeo_timestamp = jiffies;
 	} else {
 		if (S_ISDIR(inode->i_mode)) {
-			cache_validity |= NFS_INO_INVALID_DATA;
+			nfsi->cache_validity |= NFS_INO_INVALID_DATA;
 			nfs_force_lookup_revalidate(inode);
 		} else {
 			if (!NFS_PROTO(inode)->have_delegation(inode,
 							       FMODE_READ))
-				cache_validity |= NFS_INO_REVAL_PAGECACHE;
+				nfsi->cache_validity |= NFS_INO_REVAL_PAGECACHE;
 		}
 
 		if (cinfo->before != inode_peek_iversion_raw(inode))
-			cache_validity |= NFS_INO_INVALID_ACCESS |
-					  NFS_INO_INVALID_ACL |
-					  NFS_INO_INVALID_XATTR;
+			nfsi->cache_validity |= NFS_INO_INVALID_ACCESS |
+						NFS_INO_INVALID_ACL |
+						NFS_INO_INVALID_XATTR;
 	}
 	inode_set_iversion_raw(inode, cinfo->after);
 	nfsi->read_cache_jiffies = timestamp;
 	nfsi->attr_gencount = nfs_inc_attr_generation_counter();
-	nfs_set_cache_invalid(inode, cache_validity);
 	nfsi->cache_validity &= ~NFS_INO_INVALID_CHANGE;
+
+	if (nfsi->cache_validity & NFS_INO_INVALID_DATA)
+		nfs_fscache_invalidate(inode);
 }
 
 void
@@ -5889,9 +5893,6 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	unsigned int npages = DIV_ROUND_UP(buflen, PAGE_SIZE);
 	int ret, i;
 
-	/* You can't remove system.nfs4_acl: */
-	if (buflen == 0)
-		return -EINVAL;
 	if (!nfs4_server_supports_acls(server))
 		return -EOPNOTSUPP;
 	if (npages > ARRAY_SIZE(pages))
@@ -5914,9 +5915,9 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	 * so mark the attribute cache invalid.
 	 */
 	spin_lock(&inode->i_lock);
-	nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE |
-					     NFS_INO_INVALID_CTIME |
-					     NFS_INO_REVAL_FORCED);
+	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_CHANGE
+		| NFS_INO_INVALID_CTIME
+		| NFS_INO_REVAL_FORCED;
 	spin_unlock(&inode->i_lock);
 	nfs_access_zap_cache(inode);
 	nfs_zap_acl_cache(inode);
@@ -5968,7 +5969,7 @@ static int _nfs4_get_security_label(struct inode *inode, void *buf,
 		return ret;
 	if (!(fattr.valid & NFS_ATTR_FATTR_V4_SECURITY_LABEL))
 		return -ENOENT;
-	return label.len;
+	return 0;
 }
 
 static int nfs4_get_security_label(struct inode *inode, void *buf,

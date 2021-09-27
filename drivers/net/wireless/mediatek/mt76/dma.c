@@ -345,6 +345,7 @@ mt76_dma_tx_queue_skb(struct mt76_dev *dev, struct mt76_queue *q,
 	};
 	struct ieee80211_hw *hw;
 	int len, n = 0, ret = -ENOMEM;
+	struct mt76_queue_entry e;
 	struct mt76_txwi_cache *t;
 	struct sk_buff *iter;
 	dma_addr_t addr;
@@ -386,11 +387,6 @@ mt76_dma_tx_queue_skb(struct mt76_dev *dev, struct mt76_queue *q,
 	}
 	tx_info.nbuf = n;
 
-	if (q->queued + (tx_info.nbuf + 1) / 2 >= q->ndesc - 1) {
-		ret = -ENOMEM;
-		goto unmap;
-	}
-
 	dma_sync_single_for_cpu(dev->dev, t->dma_addr, dev->drv->txwi_size,
 				DMA_TO_DEVICE);
 	ret = dev->drv->tx_prepare_skb(dev, txwi, q->qid, wcid, sta, &tx_info);
@@ -398,6 +394,11 @@ mt76_dma_tx_queue_skb(struct mt76_dev *dev, struct mt76_queue *q,
 				   DMA_TO_DEVICE);
 	if (ret < 0)
 		goto unmap;
+
+	if (q->queued + (tx_info.nbuf + 1) / 2 >= q->ndesc - 1) {
+		ret = -ENOMEM;
+		goto unmap;
+	}
 
 	return mt76_dma_add_buf(dev, q, tx_info.buf, tx_info.nbuf,
 				tx_info.info, tx_info.skb, t);
@@ -418,7 +419,9 @@ free:
 	}
 #endif
 
-	dev_kfree_skb(tx_info.skb);
+	e.skb = tx_info.skb;
+	e.txwi = t;
+	dev->drv->tx_complete_skb(dev, &e);
 	mt76_put_txwi(dev, t);
 	return ret;
 }
@@ -512,13 +515,13 @@ mt76_add_fragment(struct mt76_dev *dev, struct mt76_queue *q, void *data,
 {
 	struct sk_buff *skb = q->rx_head;
 	struct skb_shared_info *shinfo = skb_shinfo(skb);
-	int nr_frags = shinfo->nr_frags;
 
-	if (nr_frags < ARRAY_SIZE(shinfo->frags)) {
+	if (shinfo->nr_frags < ARRAY_SIZE(shinfo->frags)) {
 		struct page *page = virt_to_head_page(data);
 		int offset = data - page_address(page) + q->buf_offset;
 
-		skb_add_rx_frag(skb, nr_frags, page, offset, len, q->buf_size);
+		skb_add_rx_frag(skb, shinfo->nr_frags, page, offset, len,
+				q->buf_size);
 	} else {
 		skb_free_frag(data);
 	}
@@ -527,10 +530,7 @@ mt76_add_fragment(struct mt76_dev *dev, struct mt76_queue *q, void *data,
 		return;
 
 	q->rx_head = NULL;
-	if (nr_frags < ARRAY_SIZE(shinfo->frags))
-		dev->drv->rx_skb(dev, q - dev->q_rx, skb);
-	else
-		dev_kfree_skb(skb);
+	dev->drv->rx_skb(dev, q - dev->q_rx, skb);
 }
 
 static int

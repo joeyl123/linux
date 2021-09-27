@@ -98,7 +98,7 @@ static int __init em_debug_init(void)
 
 	return 0;
 }
-fs_initcall(em_debug_init);
+core_initcall(em_debug_init);
 #else /* CONFIG_DEBUG_FS */
 static void em_debug_create_pd(struct device *dev) {}
 static void em_debug_remove_pd(struct device *dev) {}
